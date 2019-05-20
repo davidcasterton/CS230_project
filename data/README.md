@@ -1,0 +1,1 @@
+Data files from https://exhibits.stanford.edu/data/browse/revs-vehicle-dynamics-database . Original CSV files were converted to parquet to optimize storage size. 

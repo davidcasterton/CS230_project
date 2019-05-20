@@ -1,7 +1,7 @@
 ### Revs Vehicle Dynamics Database
 ### Event: 2014 Targa 66
-Dates: 2014-02-21 -- 2014-02-22
-Venue: Palm Beach International Raceway
+- Dates: 2014-02-21 -- 2014-02-22
+- Venue: Palm Beach International Raceway
 
 ### source: https://exhibits.stanford.edu/data/catalog/hd122pw0365
 
