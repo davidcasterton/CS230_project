@@ -1,0 +1,64 @@
+Revs Vehicle Dynamics Database
+
+Event: 2014 Targa 66
+Dates: 2014-02-21 -- 2014-02-22
+Venue: Palm Beach International Raceway
+
+Channel Name               Description
+======================     ================================================================================
+time                       time in seconds
+handwheelAngle             handwheel angle in degrees
+throttle                   throttle position in percent
+brake                      brake pedal force in percent
+clutch                     clutch pedal force in percent
+engineSpeed                engine speed in revolutions per minute (RPM)
+PPS                        one-pulse-per-second (1PPS) output from GNSS receiver in volts - the falling edge of the pulse is the exact transition from one second to the next in GPS time
+gpsTime                    GPS time in seconds into the day
+latitude                   latitude in decimal degrees
+longitude                  longitude in decimal degrees
+altitude                   altitude compared to the WGS 84 ellipsoid in meters
+vNorth                     North velocity in meters per second
+vEast                      East velocity in meters per second
+vUp                        up velocity in meters per second
+horizontalSpeed            horizontal speed in meters per second
+vxCG                       longitudinal velocity of the vehicle body measured at the center of gravity in meters per second
+vyCG                       lateral velocity of the vehicle body measured at the center of gravity in meters per second
+vzCG                       vertical velocity of the vehicle body measured at the center of gravity in meters per second
+axCG                       longitudinal acceleration of the vehicle body measured at the center of gravity in meters per second per second
+ayCG                       lateral acceleration of the vehicle body measured at the center of gravity in meters per second per second
+azCG                       vertical acceleration of the vehicle body measured at the center of gravity in meters per second per second
+yawAngle                   yaw angle (heading) of the vehicle body in degrees
+pitchAngle                 pitch angle of the vehicle body in degrees
+rollAngle                  roll angle of the vehicle body in degrees
+rollRate                   vehicle body-frame angular rate in the x-direction in degrees per second
+pitchRate                  vehicle body-frame angular rate in the y-direction in degrees per second
+yawRate                    vehicle body-frame angular rate in the z-direction in degrees per second
+sideSlip                   vehicle body side slip angle defined as the angle between the vehicle body heading and the vehicle body horizontal velocity vector in degrees
+distance                   two-dimensional distance traveled in meters
+numSVsTracked              number of GNSS satellites tracked by the primary GNSS receiver
+gpsPosMode                 position mode of the primary GNSS receiver
+gpsVelMode                 velocity mode of the primary GNSS receiver
+gpsOrientMode              orientation mode of dual antenna systems
+HDOP                       horizontal dilution of precision of usable GNSS satellites
+PDOP                       position (3D) dilution of precision of usable GNSS satellites
+posAccuracy_north          North position accuracy in meters
+posAccuracy_east           East position accuracy in meters
+posAccuracy_down           down position accuracy in meters
+velAccuracy_north          North velocity accuracy in meters per second
+velAccuracy_east           East velocity accuracy in meters per second
+velAccuracy_down           down velocity accuracy in meters per second
+orientAccuracy_heading     heading accuracy in degrees
+orientAccuracy_pitch       pitch accuracy in degrees
+orientAccuracy_roll        roll accuracy in degrees
+chassisAccelFL             front left vertical chassis acceleration in meters per second per second
+chassisAccelFR             front right vertical chassis acceleration in meters per second per second
+chassisAccelRL             rear left vertical chassis acceleration in meters per second per second
+chassisAccelRR             rear right vertical chassis acceleration in meters per second per second
+deflectionFL               front left suspension deflection in meters
+deflectionFR               front right suspension deflection in meters
+deflectionRL               rear left suspension deflection in meters
+deflectionRR               rear right suspension deflection in meters
+wheelAccelFL               front left vertical wheel acceleration in meters per second per second
+wheelAccelFR               front right vertical wheel acceleration in meters per second per second
+wheelAccelRL               rear left vertical wheel acceleration in meters per second per second
+wheelAccelRR               rear right vertical wheel acceleration in meters per second per second
