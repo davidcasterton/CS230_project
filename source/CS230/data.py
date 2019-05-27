@@ -14,6 +14,8 @@ import time
 
 from . import common
 
+DATA_DIR = os.path.join(os.path.abspath(__file__).split('CS230_project')[0], 'CS230_project', 'data')
+
 COLUMNS_ORIG = ['time', 'handwheelAngle', 'throttle', 'brake', 'altitude', 'horizontalSpeed', 'vxCG', 'vyCG', 'yawAngle', 'pitchAngle', 'rollAngle', 'distance']  # 'latitude', 'longitude'
 COLUMNS_TO_DIFF = ['yawAngle', 'pitchAngle', 'rollAngle', 'horizontalSpeed', 'distance', 'vxCG', 'vyCG']
 COLUMN_DIFF_PREFIX = 'diff_'
@@ -34,6 +36,19 @@ DEFAULT_THRESHOLDS = [
     ('diff_vxCG', 10),
     ('diff_vyCG', 10)
 ]
+
+
+def get_all_file_paths(data_dir=DATA_DIR, exclude=['grandsport.parquet', '250lm.parquet']):
+    file_paths = []
+
+    for dir_path, dir_names, file_names in os.walk(data_dir):
+        for file_name in file_names:
+            if file_name.endswith('.parquet') and file_name not in exclude:
+                file_path = os.path.join(dir_path, file_name)
+                file_paths.append(file_path)
+
+    file_paths.sort()
+    return file_paths
 
 
 def load(file_path):
@@ -91,7 +106,7 @@ def display_discontinuities(df, stride, thresholds=DEFAULT_THRESHOLDS):
 
     for column, index, _df in discontinuity_generator(df):
         logger.debug('%s : %s', column, index)
-        display(_df)
+        display(_df)  # to be used from juypter notebook with "from IPython.display import display"
 
 
 def discontinuity_generator(df, thresholds=DEFAULT_THRESHOLDS):
