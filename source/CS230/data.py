@@ -25,6 +25,7 @@ for column in COLUMNS_TO_DERIV:
     new_column = COLUMN_DERIV_PREFIX + column
     COLUMNS.append(new_column)
 
+DERIV_COLUMNS = [COLUMN_DERIV_PREFIX + x for x in COLUMNS_TO_DERIV]
 COLUMNS_WITH_GPS_JUMP = ['horizontalSpeed', 'vxCG', 'vyCG', 'yawAngle', 'pitchAngle', 'rollAngle']
 DERIV_COLUMNS_WITH_GPS_JUMP = [COLUMN_DERIV_PREFIX + x for x in COLUMNS_WITH_GPS_JUMP]
 
@@ -36,7 +37,11 @@ DEFAULT_THRESHOLDS = [
     ('deriv_vxCG', 10),
     ('deriv_vyCG', 10)
 ]
-
+DEFAULT_START = 0
+DEFAULT_STOP = None
+DEFAULT_STEP = 250
+DEFAULT_IMAGE_WIDTH = 1000
+DEFAULT_IMAGE_HEIGHT = 500
 
 def get_all_file_paths(data_dir=DATA_DIR, exclude=['grandsport.parquet', '250lm.parquet']):
     file_paths = []
@@ -51,7 +56,7 @@ def get_all_file_paths(data_dir=DATA_DIR, exclude=['grandsport.parquet', '250lm.
     return file_paths
 
 
-def get_short_path(file_path):
+def short_path(file_path):
     return '/'.join(file_path.split('/')[-2:])
 
 
@@ -65,6 +70,10 @@ def load(file_path):
     return df
 
 
+def stride_rows(df, stride):
+    return df[df.index % stride == (stride - 1)].reset_index(drop=True)
+
+
 def add_derivs(df, stride, columns_to_deriv=COLUMNS_TO_DERIV):
     logger = logging.getLogger(common.LOG_ROOT)
 
@@ -74,7 +83,7 @@ def add_derivs(df, stride, columns_to_deriv=COLUMNS_TO_DERIV):
         df[new_column] = df[column] - df[column].shift(stride)
 
     # correct for yawAngle sign flip
-    indexes = df.index[(df['deriv_yawAngle'] > 300) | (df['deriv_yawAngle'] < -300)]
+    indexes = df.index[abs(df['deriv_yawAngle']) > 300]
     for i in indexes:
         df.at[i, 'deriv_yawAngle'] = (180 - abs(df.iloc[i]['yawAngle'])) + (180 - abs(df.iloc[i - stride]['yawAngle']))
 
@@ -105,6 +114,16 @@ def clean_discontinuities(df, stride, thresholds=DEFAULT_THRESHOLDS):
     return df
 
 
+def stride_table_rows_and_max_pool_deriv(df, stride):
+    # stride original columns
+    df_orig = df[df.index % stride == (stride - 1)][COLUMNS_ORIG].reset_index(drop=True)
+
+    # max pool derivative columns
+    df_deriv = df.groupby(df.index // stride).max()[DERIV_COLUMNS].reset_index(drop=True)
+
+    return pandas.concat([df_orig, df_deriv], axis=1, sort=False)
+
+
 def display_discontinuities(df, stride, thresholds=DEFAULT_THRESHOLDS):
     logger = logging.getLogger(common.LOG_ROOT)
 
@@ -121,11 +140,14 @@ def discontinuity_generator(df, thresholds=DEFAULT_THRESHOLDS):
             yield column, index, df.iloc[index - 1: index + 2, :]
 
 
-def get_plotly_fig(df, file_path, stride=2500, columns=[COLUMN_DERIV_PREFIX + x for x in COLUMNS_TO_DERIV]):
+def get_plotly_fig(df, title, columns, start=DEFAULT_START, stop=DEFAULT_STOP, step=DEFAULT_STEP):
     logger = logging.getLogger(common.LOG_ROOT)
-
     data = []
-    x = df['time'].values[0::stride]
+
+    if '/' in title:
+        title = short_path(title)  # if title is path, reduce to 1 directory and file name
+
+    x = df['time'].values[start:stop:step]
 
     # replace NaN
     values = {x: 0 for x in columns}
@@ -136,7 +158,7 @@ def get_plotly_fig(df, file_path, stride=2500, columns=[COLUMN_DERIV_PREFIX + x 
             logger.debug('skipping column: %s', column)
             continue
 
-        y = df[column].values[0::stride]
+        y = df[column].values[start:stop:step]
 
         if max(abs(y)) > 1:
             yaxis = 'y2'
@@ -156,7 +178,7 @@ def get_plotly_fig(df, file_path, stride=2500, columns=[COLUMN_DERIV_PREFIX + x 
     del df
 
     layout = plotly.graph_objs.Layout(
-        title=get_short_path(file_path),
+        title=title,
         yaxis=dict(
             side='left'
         ),
@@ -168,4 +190,17 @@ def get_plotly_fig(df, file_path, stride=2500, columns=[COLUMN_DERIV_PREFIX + x 
 
     fig = plotly.graph_objs.Figure(data=data, layout=layout)
 
+    return fig
+
+
+def write_image(df, title, image_path, columns, start=DEFAULT_START, stop=DEFAULT_STOP, step=DEFAULT_STEP,
+                width=DEFAULT_IMAGE_WIDTH, height=DEFAULT_IMAGE_HEIGHT):
+
+    logger = logging.getLogger(common.LOG_ROOT)
+
+    fig = get_plotly_fig(df, title, columns=columns, start=start, stop=stop, step=step)
+    plotly.io.write_image(fig, image_path, width=width, height=height)
+    
+    logger.info('wrote image file: %s', image_path)
+    
     return fig
