@@ -16,25 +16,25 @@ from . import common
 
 DATA_DIR = os.path.join(os.path.abspath(__file__).split('CS230_project')[0], 'CS230_project', 'data')
 
-COLUMNS_ORIG = ['time', 'handwheelAngle', 'throttle', 'brake', 'altitude', 'horizontalSpeed', 'vxCG', 'vyCG', 'yawAngle', 'pitchAngle', 'rollAngle', 'distance']  # 'latitude', 'longitude'
-COLUMNS_TO_DIFF = ['yawAngle', 'pitchAngle', 'rollAngle', 'horizontalSpeed', 'distance', 'vxCG', 'vyCG']
-COLUMN_DIFF_PREFIX = 'diff_'
+COLUMNS_ORIG = ['time', 'handwheelAngle', 'throttle', 'brake', 'latitude', 'longitude', 'altitude', 'horizontalSpeed', 'vxCG', 'vyCG', 'yawAngle', 'pitchAngle', 'rollAngle', 'distance']
+COLUMNS_TO_DERIV = ['yawAngle', 'pitchAngle', 'rollAngle', 'horizontalSpeed', 'distance', 'vxCG', 'vyCG']
+COLUMN_DERIV_PREFIX = 'deriv_'
 
 COLUMNS = copy.deepcopy(COLUMNS_ORIG)
-for column in COLUMNS_TO_DIFF:
-    new_column = COLUMN_DIFF_PREFIX + column
+for column in COLUMNS_TO_DERIV:
+    new_column = COLUMN_DERIV_PREFIX + column
     COLUMNS.append(new_column)
 
 COLUMNS_WITH_GPS_JUMP = ['horizontalSpeed', 'vxCG', 'vyCG', 'yawAngle', 'pitchAngle', 'rollAngle']
-DIFF_COLUMNS_WITH_GPS_JUMP = [COLUMN_DIFF_PREFIX + x for x in COLUMNS_WITH_GPS_JUMP]
+DERIV_COLUMNS_WITH_GPS_JUMP = [COLUMN_DERIV_PREFIX + x for x in COLUMNS_WITH_GPS_JUMP]
 
 DEFAULT_THRESHOLDS = [
-    ('diff_yawAngle', 10),
-    ('diff_pitchAngle', 2),
-    ('diff_rollAngle', 2),
-    ('diff_distance', 10),
-    ('diff_vxCG', 10),
-    ('diff_vyCG', 10)
+    ('deriv_yawAngle', 10),
+    ('deriv_pitchAngle', 2),
+    ('deriv_rollAngle', 2),
+    ('deriv_distance', 10),
+    ('deriv_vxCG', 10),
+    ('deriv_vyCG', 10)
 ]
 
 
@@ -65,23 +65,23 @@ def load(file_path):
     return df
 
 
-def add_diffs(df, stride, columns_to_diff=COLUMNS_TO_DIFF):
+def add_derivs(df, stride, columns_to_deriv=COLUMNS_TO_DERIV):
     logger = logging.getLogger(common.LOG_ROOT)
 
-    for column in columns_to_diff:
-        new_column = COLUMN_DIFF_PREFIX + column
+    for column in columns_to_deriv:
+        new_column = COLUMN_DERIV_PREFIX + column
 
         df[new_column] = df[column] - df[column].shift(stride)
 
     # correct for yawAngle sign flip
-    indexes = df.index[(df['diff_yawAngle'] > 300) | (df['diff_yawAngle'] < -300)]
+    indexes = df.index[(df['deriv_yawAngle'] > 300) | (df['deriv_yawAngle'] < -300)]
     for i in indexes:
-        df.at[i, 'diff_yawAngle'] = (180 - abs(df.iloc[i]['yawAngle'])) + (180 - abs(df.iloc[i - stride]['yawAngle']))
+        df.at[i, 'deriv_yawAngle'] = (180 - abs(df.iloc[i]['yawAngle'])) + (180 - abs(df.iloc[i - stride]['yawAngle']))
 
-    logger.debug('# diff_yawAngle fixed: %s' % len(indexes))
+    logger.debug('# deriv_yawAngle fixed: %s' % len(indexes))
 
-    # replace NaN with zeros in diff columns
-    values = {COLUMN_DIFF_PREFIX + x: 0 for x in columns_to_diff}
+    # replace NaN with zeros in deriv columns
+    values = {COLUMN_DERIV_PREFIX + x: 0 for x in columns_to_deriv}
     df.fillna(value=values, inplace=True)
 
     return df
@@ -97,10 +97,10 @@ def clean_discontinuities(df, stride, thresholds=DEFAULT_THRESHOLDS):
         for i in indexes:
             if numpy.isnan(df.iloc[i - stride]['altitude']):
                 logger.debug('GPS NaN at %s : %s -> %s', i,
-                        df.iloc[i][DIFF_COLUMNS_WITH_GPS_JUMP].to_string(header=False, index=False).replace(os.linesep, ','),
-                        df.iloc[i - 1][DIFF_COLUMNS_WITH_GPS_JUMP].to_string(header=False, index=False).replace(os.linesep, ','))
+                        df.iloc[i][DERIV_COLUMNS_WITH_GPS_JUMP].to_string(header=False, index=False).replace(os.linesep, ','),
+                        df.iloc[i - 1][DERIV_COLUMNS_WITH_GPS_JUMP].to_string(header=False, index=False).replace(os.linesep, ','))
 
-                df.at[i, DIFF_COLUMNS_WITH_GPS_JUMP] = df.iloc[i - stride][DIFF_COLUMNS_WITH_GPS_JUMP]
+                df.at[i, DERIV_COLUMNS_WITH_GPS_JUMP] = df.iloc[i - stride][DERIV_COLUMNS_WITH_GPS_JUMP]
 
     return df
 
@@ -121,21 +121,49 @@ def discontinuity_generator(df, thresholds=DEFAULT_THRESHOLDS):
             yield column, index, df.iloc[index - 1: index + 2, :]
 
 
-def get_plotly_fig(df, file_path, stride=2500):
+def get_plotly_fig(df, file_path, stride=2500, columns=[COLUMN_DERIV_PREFIX + x for x in COLUMNS_TO_DERIV]):
+    logger = logging.getLogger(common.LOG_ROOT)
+
     data = []
-    times = df['time'].values
+    x = df['time'].values[0::stride]
 
-    for sig_name in COLUMNS_TO_DIFF:
+    # replace NaN
+    values = {x: 0 for x in columns}
+    df = df.fillna(value=values)
+
+    for column in columns:
+        if column == 'time' or column == 'distance':
+            logger.debug('skipping column: %s', column)
+            continue
+
+        y = df[column].values[0::stride]
+
+        if max(abs(y)) > 1:
+            yaxis = 'y2'
+            name = column + ' (right axis)'
+        else:
+            yaxis = 'y'
+            name = column
+
         trace = plotly.graph_objs.Scatter(
-            x=times[0::stride],
-            y=df[COLUMN_DIFF_PREFIX + sig_name].values[0::stride],
-            name=COLUMN_DIFF_PREFIX + sig_name,
+            x=x,
+            y=y,
+            name=name,
+            yaxis=yaxis
         )
-
         data.append(trace)
 
+    del df
+
     layout = plotly.graph_objs.Layout(
-        title=get_short_path(file_path)
+        title=get_short_path(file_path),
+        yaxis=dict(
+            side='left'
+        ),
+        yaxis2=dict(
+            overlaying='y',
+            side='right'
+        )
     )
 
     fig = plotly.graph_objs.Figure(data=data, layout=layout)
