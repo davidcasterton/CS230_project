@@ -43,7 +43,9 @@ DEFAULT_STEP = 250
 DEFAULT_IMAGE_WIDTH = 1000
 DEFAULT_IMAGE_HEIGHT = 500
 
+
 def get_all_file_paths(data_dir=DATA_DIR, exclude=['grandsport.parquet', '250lm.parquet']):
+    logger = logging.getLogger(common.LOG_ROOT)
     file_paths = []
 
     for dir_path, dir_names, file_names in os.walk(data_dir):
@@ -53,6 +55,7 @@ def get_all_file_paths(data_dir=DATA_DIR, exclude=['grandsport.parquet', '250lm.
                 file_paths.append(file_path)
 
     file_paths.sort()
+    logger.info('num files: %s', len(file_paths))
     return file_paths
 
 
@@ -74,7 +77,7 @@ def stride_rows(df, stride):
     return df[df.index % stride == (stride - 1)].reset_index(drop=True)
 
 
-def add_derivs(df, stride, columns_to_deriv=COLUMNS_TO_DERIV):
+def add_derivatives(df, stride, columns_to_deriv=COLUMNS_TO_DERIV):
     logger = logging.getLogger(common.LOG_ROOT)
 
     for column in columns_to_deriv:
@@ -193,14 +196,110 @@ def get_plotly_fig(df, title, columns, start=DEFAULT_START, stop=DEFAULT_STOP, s
     return fig
 
 
-def write_image(df, title, image_path, columns, start=DEFAULT_START, stop=DEFAULT_STOP, step=DEFAULT_STEP,
-                width=DEFAULT_IMAGE_WIDTH, height=DEFAULT_IMAGE_HEIGHT):
-
+def write_image(fig, image_path, width=DEFAULT_IMAGE_WIDTH, height=DEFAULT_IMAGE_HEIGHT):
     logger = logging.getLogger(common.LOG_ROOT)
 
-    fig = get_plotly_fig(df, title, columns=columns, start=start, stop=stop, step=step)
+    # make image directory if necessary
+    image_dir = os.path.join('images', image_path.split('/')[-2])
+    if not os.path.exists(image_dir):
+        logger.info('mkdir: %s', image_dir)
+        os.mkdir(image_dir)
+
     plotly.io.write_image(fig, image_path, width=width, height=height)
-    
-    logger.info('wrote image file: %s', image_path)
+    logger.info('wrote: %s', image_path)
     
     return fig
+
+
+def plot_source(df, file_path, plot=True, write=False):
+    start = DEFAULT_START
+    stop = DEFAULT_STOP
+    step = DEFAULT_STEP
+    columns = COLUMNS_ORIG
+    image_path = None
+    title = '<b>source data zoomed-out</b>: sampled with 1D stride={step}'.format(step=step)
+    if write:
+        image_dir = os.path.join('images', file_path.split('/')[-2])
+        image_path = os.path.join(image_dir, os.path.splitext(file_path.split('/')[-1])[0] + '.jpeg')
+        title = image_path + '<br>' + title
+
+    fig = get_plotly_fig(df, title, columns=columns, start=start, stop=stop, step=step)
+
+    if plot:
+        plotly.offline.iplot(fig)
+    if write:
+        fig = write_image(fig=fig, image_path=image_path)
+
+    return fig, image_path
+
+
+def plot_source_zoomed(df, file_path, plot=True, write=False, start=None, stop=None, step=None):
+    if start is None:
+        start = len(df) // 2
+    if stop is None:
+        stop = start + 200
+    if step is None:
+        step = 1
+    columns = COLUMNS_ORIG
+    image_path = None
+    title = '<b>source data zoomed-in</b>: indexes {start} : {stop}'.format(start=start, stop=stop)
+    if write:
+        image_dir = os.path.join('images', file_path.split('/')[-2])
+        image_path = os.path.join(image_dir, os.path.splitext(file_path.split('/')[-1])[0] + '_zoom.jpeg')
+        title = image_path + '<br>' + title
+
+    fig = get_plotly_fig(df, title, columns=columns, start=start, stop=stop, step=step)
+
+    if plot:
+        plotly.offline.iplot(fig)
+    if write:
+        fig = write_image(fig=fig, image_path=image_path)
+
+    return fig, image_path
+
+
+def plot_derivatives(df, file_path, plot=True, write=False):
+    start = DEFAULT_START
+    stop = DEFAULT_STOP
+    step = DEFAULT_STEP
+    columns = DERIV_COLUMNS
+    image_path = None
+    title = '<b>derivatives zoomed-out</b>: sampled with 1D stride={step}'.format(step=step)
+    if write:
+        image_dir = os.path.join('images', file_path.split('/')[-2])
+        image_path = os.path.join(image_dir, os.path.splitext(file_path.split('/')[-1])[0] + '_deriv.jpeg')
+        title = image_path + '<br>' + title
+
+    fig = get_plotly_fig(df, title, columns=columns, start=start, stop=stop, step=step)
+
+    if plot:
+        plotly.offline.iplot(fig)
+    if write:
+        fig = write_image(fig=fig, image_path=image_path)
+
+    return fig, image_path
+
+
+def plot_derivatives_zoomed(df, file_path, plot=True, write=False, start=None, stop=None, step=None):
+    if start is None:
+        start = len(df) // 2
+    if stop is None:
+        stop = start + 200
+    if step is None:
+        step = 1
+    columns = DERIV_COLUMNS
+    image_path = None
+    title = '<b>derivatives zoomed-in</b>: indexes {start} : {stop}'.format(start=start, stop=stop)
+    if write:
+        image_dir = os.path.join('images', file_path.split('/')[-2])
+        image_path = os.path.join(image_dir, os.path.splitext(file_path.split('/')[-1])[0] + '_deriv_zoom.jpeg')
+        title = image_path + '<br>' + title
+
+    fig = get_plotly_fig(df, title, columns=columns, start=start, stop=stop, step=step)
+
+    if plot:
+        plotly.offline.iplot(fig)
+    if write:
+        fig = write_image(fig=fig, image_path=image_path)
+
+    return fig, image_path
