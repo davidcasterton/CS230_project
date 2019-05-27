@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import logging
 import numpy
 import os
@@ -25,9 +26,9 @@ for column in COLUMNS_TO_DERIV:
     new_column = COLUMN_DERIV_PREFIX + column
     COLUMNS.append(new_column)
 
-DERIV_COLUMNS = [COLUMN_DERIV_PREFIX + x for x in COLUMNS_TO_DERIV]
+COLUMNS_DERIV = [COLUMN_DERIV_PREFIX + x for x in COLUMNS_TO_DERIV]
 COLUMNS_WITH_GPS_JUMP = ['horizontalSpeed', 'vxCG', 'vyCG', 'yawAngle', 'pitchAngle', 'rollAngle']
-DERIV_COLUMNS_WITH_GPS_JUMP = [COLUMN_DERIV_PREFIX + x for x in COLUMNS_WITH_GPS_JUMP]
+COLUMNS_DERIV_WITH_GPS_JUMP = [COLUMN_DERIV_PREFIX + x for x in COLUMNS_WITH_GPS_JUMP]
 
 DEFAULT_THRESHOLDS = [
     ('deriv_yawAngle', 10),
@@ -109,10 +110,10 @@ def clean_discontinuities(df, stride, thresholds=DEFAULT_THRESHOLDS):
         for i in indexes:
             if numpy.isnan(df.iloc[i - stride]['altitude']):
                 logger.debug('GPS NaN at %s : %s -> %s', i,
-                        df.iloc[i][DERIV_COLUMNS_WITH_GPS_JUMP].to_string(header=False, index=False).replace(os.linesep, ','),
-                        df.iloc[i - 1][DERIV_COLUMNS_WITH_GPS_JUMP].to_string(header=False, index=False).replace(os.linesep, ','))
+                        df.iloc[i][COLUMNS_DERIV_WITH_GPS_JUMP].to_string(header=False, index=False).replace(os.linesep, ','),
+                        df.iloc[i - 1][COLUMNS_DERIV_WITH_GPS_JUMP].to_string(header=False, index=False).replace(os.linesep, ','))
 
-                df.at[i, DERIV_COLUMNS_WITH_GPS_JUMP] = df.iloc[i - stride][DERIV_COLUMNS_WITH_GPS_JUMP]
+                df.at[i, COLUMNS_DERIV_WITH_GPS_JUMP] = df.iloc[i - stride][COLUMNS_DERIV_WITH_GPS_JUMP]
 
     return df
 
@@ -122,7 +123,7 @@ def stride_table_rows_and_max_pool_deriv(df, stride):
     df_orig = df[df.index % stride == (stride - 1)][COLUMNS_ORIG].reset_index(drop=True)
 
     # max pool derivative columns
-    df_deriv = df.groupby(df.index // stride).max()[DERIV_COLUMNS].reset_index(drop=True)
+    df_deriv = df.groupby(df.index // stride).max()[COLUMNS_DERIV].reset_index(drop=True)
 
     return pandas.concat([df_orig, df_deriv], axis=1, sort=False)
 
@@ -211,88 +212,21 @@ def write_image(fig, image_path, width=DEFAULT_IMAGE_WIDTH, height=DEFAULT_IMAGE
     return fig
 
 
-def plot_source(df, file_path, plot=True, write=False):
-    start = DEFAULT_START
-    stop = DEFAULT_STOP
-    step = DEFAULT_STEP
-    columns = COLUMNS_ORIG
-    image_path = None
-    title = '<b>source data zoomed-out</b>: sampled with 1D stride={step}'.format(step=step)
-    if write:
-        image_dir = os.path.join('images', file_path.split('/')[-2])
-        image_path = os.path.join(image_dir, os.path.splitext(file_path.split('/')[-1])[0] + '-%s-%s-%s' % (start, stop, step) + '.jpeg')
-        title = image_path + '<br>' + title
-
-    fig = get_plotly_fig(df, title, columns=columns, start=start, stop=stop, step=step)
-
-    if plot:
-        plotly.offline.iplot(fig)
-    if write:
-        fig = write_image(fig=fig, image_path=image_path)
-
-    return fig, image_path
-
-
-def plot_source_zoomed(df, file_path, plot=True, write=False, start=None, stop=None, step=None):
-    if start is None:
+def plot(df, file_path, columns, title='', plot=True, write=False, start=DEFAULT_START, stop=DEFAULT_STOP, step=DEFAULT_STEP):
+    if start == 'middle':
         start = len(df) // 2
-    if stop is None:
+    if stop == 'middle':
         stop = start + 200
-    if step is None:
-        step = 1
-    columns = COLUMNS_ORIG
     image_path = None
-    title = '<b>source data zoomed-in</b>: indexes {start} : {stop}'.format(start=start, stop=stop)
+    if title:
+        title += '<br>'
+    title += 'start {start}, stop {stop}, step {step}'.format(start=start, stop='end' if stop is None else stop, step=step)
     if write:
         image_dir = os.path.join('images', file_path.split('/')[-2])
-        image_path = os.path.join(image_dir, os.path.splitext(file_path.split('/')[-1])[0] + '-%s-%s-%s' % (start, stop, step) + '_zoom.jpeg')
-        title = image_path + '<br>' + title
-
-    fig = get_plotly_fig(df, title, columns=columns, start=start, stop=stop, step=step)
-
-    if plot:
-        plotly.offline.iplot(fig)
-    if write:
-        fig = write_image(fig=fig, image_path=image_path)
-
-    return fig, image_path
-
-
-def plot_derivatives(df, file_path, plot=True, write=False):
-    start = DEFAULT_START
-    stop = DEFAULT_STOP
-    step = DEFAULT_STEP
-    columns = DERIV_COLUMNS
-    image_path = None
-    title = '<b>derivatives zoomed-out</b>: sampled with 1D stride={step}'.format(step=step)
-    if write:
-        image_dir = os.path.join('images', file_path.split('/')[-2])
-        image_path = os.path.join(image_dir, os.path.splitext(file_path.split('/')[-1])[0] + '-%s-%s-%s' % (start, stop, step) + '_deriv.jpeg')
-        title = image_path + '<br>' + title
-
-    fig = get_plotly_fig(df, title, columns=columns, start=start, stop=stop, step=step)
-
-    if plot:
-        plotly.offline.iplot(fig)
-    if write:
-        fig = write_image(fig=fig, image_path=image_path)
-
-    return fig, image_path
-
-
-def plot_derivatives_zoomed(df, file_path, plot=True, write=False, start=None, stop=None, step=None):
-    if start is None:
-        start = len(df) // 2
-    if stop is None:
-        stop = start + 200
-    if step is None:
-        step = 1
-    columns = DERIV_COLUMNS
-    image_path = None
-    title = '<b>derivatives zoomed-in</b>: indexes {start} : {stop}'.format(start=start, stop=stop)
-    if write:
-        image_dir = os.path.join('images', file_path.split('/')[-2])
-        image_path = os.path.join(image_dir, os.path.splitext(file_path.split('/')[-1])[0] + '-%s-%s-%s' % (start, stop, step) + '_deriv_zoom.jpeg')
+        columns_hash = hashlib.md5()
+        columns_hash.update(" ".join(columns).encode('utf-8'))
+        image_path = os.path.join(image_dir, os.path.splitext(file_path.split('/')[-1])[0] +
+                                  '-%s-%s-%s-%s' % (start, stop, step, columns_hash.hexdigest()[:7]) + '.jpeg')
         title = image_path + '<br>' + title
 
     fig = get_plotly_fig(df, title, columns=columns, start=start, stop=stop, step=step)
