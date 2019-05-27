@@ -51,6 +51,10 @@ def get_all_file_paths(data_dir=DATA_DIR, exclude=['grandsport.parquet', '250lm.
     return file_paths
 
 
+def get_short_path(file_path):
+    return '/'.join(file_path.split('/')[-2:])
+
+
 def load(file_path):
     # read parquet
     table = pq.read_table(file_path)
@@ -74,7 +78,7 @@ def add_diffs(df, stride, columns_to_diff=COLUMNS_TO_DIFF):
     for i in indexes:
         df.at[i, 'diff_yawAngle'] = (180 - abs(df.iloc[i]['yawAngle'])) + (180 - abs(df.iloc[i - stride]['yawAngle']))
 
-    logger.warning('# diff_yawAngle fixed: %s' % len(indexes))
+    logger.debug('# diff_yawAngle fixed: %s' % len(indexes))
 
     # replace NaN with zeros in diff columns
     values = {COLUMN_DIFF_PREFIX + x: 0 for x in columns_to_diff}
@@ -92,7 +96,7 @@ def clean_discontinuities(df, stride, thresholds=DEFAULT_THRESHOLDS):
 
         for i in indexes:
             if numpy.isnan(df.iloc[i - stride]['altitude']):
-                logger.warning('GPS NaN at %s : %s -> %s', i,
+                logger.debug('GPS NaN at %s : %s -> %s', i,
                         df.iloc[i][DIFF_COLUMNS_WITH_GPS_JUMP].to_string(header=False, index=False).replace(os.linesep, ','),
                         df.iloc[i - 1][DIFF_COLUMNS_WITH_GPS_JUMP].to_string(header=False, index=False).replace(os.linesep, ','))
 
@@ -131,7 +135,7 @@ def get_plotly_fig(df, file_path, stride=2500):
         data.append(trace)
 
     layout = plotly.graph_objs.Layout(
-        title='/'.join(file_path.split('/')[-2:])
+        title=get_short_path(file_path)
     )
 
     fig = plotly.graph_objs.Figure(data=data, layout=layout)
