@@ -220,7 +220,7 @@ def plot_source(df, file_path, plot=True, write=False):
     title = '<b>source data zoomed-out</b>: sampled with 1D stride={step}'.format(step=step)
     if write:
         image_dir = os.path.join('images', file_path.split('/')[-2])
-        image_path = os.path.join(image_dir, os.path.splitext(file_path.split('/')[-1])[0] + '.jpeg')
+        image_path = os.path.join(image_dir, os.path.splitext(file_path.split('/')[-1])[0] + '-%s-%s-%s' % (start, stop, step) + '.jpeg')
         title = image_path + '<br>' + title
 
     fig = get_plotly_fig(df, title, columns=columns, start=start, stop=stop, step=step)
@@ -245,7 +245,7 @@ def plot_source_zoomed(df, file_path, plot=True, write=False, start=None, stop=N
     title = '<b>source data zoomed-in</b>: indexes {start} : {stop}'.format(start=start, stop=stop)
     if write:
         image_dir = os.path.join('images', file_path.split('/')[-2])
-        image_path = os.path.join(image_dir, os.path.splitext(file_path.split('/')[-1])[0] + '_zoom.jpeg')
+        image_path = os.path.join(image_dir, os.path.splitext(file_path.split('/')[-1])[0] + '-%s-%s-%s' % (start, stop, step) + '_zoom.jpeg')
         title = image_path + '<br>' + title
 
     fig = get_plotly_fig(df, title, columns=columns, start=start, stop=stop, step=step)
@@ -267,7 +267,7 @@ def plot_derivatives(df, file_path, plot=True, write=False):
     title = '<b>derivatives zoomed-out</b>: sampled with 1D stride={step}'.format(step=step)
     if write:
         image_dir = os.path.join('images', file_path.split('/')[-2])
-        image_path = os.path.join(image_dir, os.path.splitext(file_path.split('/')[-1])[0] + '_deriv.jpeg')
+        image_path = os.path.join(image_dir, os.path.splitext(file_path.split('/')[-1])[0] + '-%s-%s-%s' % (start, stop, step) + '_deriv.jpeg')
         title = image_path + '<br>' + title
 
     fig = get_plotly_fig(df, title, columns=columns, start=start, stop=stop, step=step)
@@ -292,7 +292,7 @@ def plot_derivatives_zoomed(df, file_path, plot=True, write=False, start=None, s
     title = '<b>derivatives zoomed-in</b>: indexes {start} : {stop}'.format(start=start, stop=stop)
     if write:
         image_dir = os.path.join('images', file_path.split('/')[-2])
-        image_path = os.path.join(image_dir, os.path.splitext(file_path.split('/')[-1])[0] + '_deriv_zoom.jpeg')
+        image_path = os.path.join(image_dir, os.path.splitext(file_path.split('/')[-1])[0] + '-%s-%s-%s' % (start, stop, step) + '_deriv_zoom.jpeg')
         title = image_path + '<br>' + title
 
     fig = get_plotly_fig(df, title, columns=columns, start=start, stop=stop, step=step)
