@@ -262,7 +262,7 @@ def get_data_sets(df, train_percent, dev_percent, test_percent, data_columns, la
     del df_labels
 
     # shuffle order of combined data frame
-    df_combined = df_combined.sample(frac=1).reset_index(drop=True)
+    df_combined = df_combined.sample(frac=1)  #.reset_index(drop=True)
 
     # set indexes to split across 3 sets
     train_rows = (0, round(len(df) * train_percent))
@@ -271,7 +271,7 @@ def get_data_sets(df, train_percent, dev_percent, test_percent, data_columns, la
 
     # split into 3 sets
     df_train = df_combined.iloc[train_rows[0]: train_rows[1]]
-    df_dev = df_combined.iloc[dev_rows[0]: dev_rows[1]].reset_index(drop=True)
-    df_test = df_combined.iloc[test_rows[0]: test_rows[1]].reset_index(drop=True)
+    df_dev = df_combined.iloc[dev_rows[0]: dev_rows[1]]
+    df_test = df_combined.iloc[test_rows[0]: test_rows[1]]
 
     return df_train, df_dev, df_test
