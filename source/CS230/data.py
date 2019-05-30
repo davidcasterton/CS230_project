@@ -1,6 +1,7 @@
 import copy
 import hashlib
 import logging
+import math
 import numpy
 import os
 import pandas
@@ -9,6 +10,7 @@ import plotly
 import pprint
 import pyarrow
 import pyarrow.parquet as pq
+import random
 import six
 import sys
 import time
@@ -17,24 +19,34 @@ from . import common
 
 DATA_DIR = os.path.join(os.path.abspath(__file__).split('CS230_project')[0], 'CS230_project', 'data')
 
-COLUMNS_ORIG = ['time', 'handwheelAngle', 'throttle', 'brake', 'latitude', 'longitude', 'altitude', 'horizontalSpeed', 'vxCG', 'vyCG', 'yawAngle', 'pitchAngle', 'rollAngle', 'distance']
-COLUMNS_TO_DERIV = ['yawAngle', 'pitchAngle', 'rollAngle', 'horizontalSpeed', 'distance', 'vxCG', 'vyCG']
+COLUMNS_ALL = ['HDOP', 'PDOP', 'PPS', 'altitude', 'axCG', 'ayCG', 'azCG', 'brake', 'chassisAccelFL', 'chassisAccelFR',
+                'chassisAccelRL', 'chassisAccelRR', 'clutch', 'deflectionFL', 'deflectionFR', 'deflectionRL',
+                'deflectionRR', 'distance', 'engineSpeed', 'gpsOrientMode', 'gpsPosMode', 'gpsTime', 'gpsVelMode',
+                'handwheelAngle', 'horizontalSpeed', 'latitude', 'longitude', 'numSVsTracked', 'orientAccuracy_heading',
+                'orientAccuracy_pitch', 'orientAccuracy_roll', 'pitchAngle', 'pitchRate', 'posAccuracy_down',
+                'posAccuracy_east', 'posAccuracy_north', 'rollAngle', 'rollRate', 'sideSlip', 'throttle', 'time',
+                'vEast', 'vNorth', 'vUp', 'velAccuracy_down', 'velAccuracy_east', 'velAccuracy_north', 'vxCG', 'vyCG',
+                'vzCG', 'wheelAccelFL', 'wheelAccelFR', 'wheelAccelRL', 'wheelAccelRR', 'yawAngle', 'yawRate']
+COLUMNS_HUMAN_INPUT = ['brake', 'throttle', 'handwheelAngle']
+COLUMNS_LONGITUDINAL = ['throttle', 'brake', 'vxCG', 'pitchAngle']
+COLUMNS_LATERAL = ['handwheelAngle', 'vyCG', 'rollAngle', 'yawAngle']
+COLUMNS_MOTION = ['axCG', 'ayCG',  'pitchAngle', 'pitchRate', 'rollAngle', 'rollRate', 'vxCG', 'vyCG', 'wheelAccelFL',
+                  'wheelAccelFR', 'wheelAccelRL', 'wheelAccelRR', 'yawAngle', 'yawRate']
 COLUMN_DERIV_PREFIX = 'deriv_'
 
-COLUMNS = copy.deepcopy(COLUMNS_ORIG)
-for column in COLUMNS_TO_DERIV:
+COLUMNS = copy.deepcopy(COLUMNS_ALL)
+for column in COLUMNS_MOTION:
     new_column = COLUMN_DERIV_PREFIX + column
     COLUMNS.append(new_column)
 
-COLUMNS_DERIV = [COLUMN_DERIV_PREFIX + x for x in COLUMNS_TO_DERIV]
-COLUMNS_WITH_GPS_JUMP = ['horizontalSpeed', 'vxCG', 'vyCG', 'yawAngle', 'pitchAngle', 'rollAngle']
+COLUMNS_DERIV = [COLUMN_DERIV_PREFIX + x for x in COLUMNS_MOTION]
+COLUMNS_WITH_GPS_JUMP = ['axCG', 'ayCG', 'vxCG', 'vyCG', 'yawAngle', 'pitchAngle', 'rollAngle']
 COLUMNS_DERIV_WITH_GPS_JUMP = [COLUMN_DERIV_PREFIX + x for x in COLUMNS_WITH_GPS_JUMP]
 
 DEFAULT_THRESHOLDS = [
     ('deriv_yawAngle', 10),
     ('deriv_pitchAngle', 2),
     ('deriv_rollAngle', 2),
-    ('deriv_distance', 10),
     ('deriv_vxCG', 10),
     ('deriv_vyCG', 10)
 ]
@@ -78,7 +90,7 @@ def stride_rows(df, stride):
     return df[df.index % stride == (stride - 1)].reset_index(drop=True)
 
 
-def add_derivatives(df, stride, columns_to_deriv=COLUMNS_TO_DERIV):
+def add_derivatives(df, stride, columns_to_deriv=COLUMNS_MOTION):
     logger = logging.getLogger(common.LOG_ROOT)
 
     for column in columns_to_deriv:
@@ -120,7 +132,7 @@ def clean_discontinuities(df, stride, thresholds=DEFAULT_THRESHOLDS):
 
 def stride_table_rows_and_max_pool_deriv(df, stride):
     # stride original columns
-    df_orig = df[df.index % stride == (stride - 1)][COLUMNS_ORIG].reset_index(drop=True)
+    df_orig = df[df.index % stride == (stride - 1)][COLUMNS_ALL].reset_index(drop=True)
 
     # max pool derivative columns
     df_deriv = df.groupby(df.index // stride).max()[COLUMNS_DERIV].reset_index(drop=True)
@@ -216,7 +228,7 @@ def plot(df, file_path, columns, title='', plot=True, write=False, start=DEFAULT
     if start == 'middle':
         start = len(df) // 2
     if stop == 'middle':
-        stop = start + 200
+        stop = start + 100
     image_path = None
     if title:
         title += '<br>'
@@ -237,3 +249,29 @@ def plot(df, file_path, columns, title='', plot=True, write=False, start=DEFAULT
         fig = write_image(fig=fig, image_path=image_path)
 
     return fig, image_path
+
+
+def get_data_sets(df, train_percent, dev_percent, test_percent, data_columns, label_columns):
+    assert (train_percent + dev_percent + test_percent) == 1
+
+    # associate input data (prior timestamp) & output labels (next timestamp) on single row
+    df_data = df.iloc[:-1][data_columns].reset_index(drop=True)
+    df_labels = df.iloc[1:][label_columns].reset_index(drop=True)
+    df_combined = pandas.concat([df_data, df_labels], axis=1, sort=False)
+    del df_data
+    del df_labels
+
+    # shuffle order of combined data frame
+    df_combined = df_combined.sample(frac=1).reset_index(drop=True)
+
+    # set indexes to split across 3 sets
+    train_rows = (0, round(len(df) * train_percent))
+    dev_rows = (train_rows[1], train_rows[1] + round(len(df) * dev_percent))
+    test_rows = (dev_rows[1], dev_rows[1] + round(len(df) * test_percent))
+
+    # split into 3 sets
+    df_train = df_combined.iloc[train_rows[0]: train_rows[1]]
+    df_dev = df_combined.iloc[dev_rows[0]: dev_rows[1]].reset_index(drop=True)
+    df_test = df_combined.iloc[test_rows[0]: test_rows[1]].reset_index(drop=True)
+
+    return df_train, df_dev, df_test
