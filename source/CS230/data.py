@@ -39,7 +39,7 @@ for column in COLUMNS_MOTION:
     new_column = COLUMN_DERIV_PREFIX + column
     COLUMNS.append(new_column)
 
-COLUMNS_DERIV = [COLUMN_DERIV_PREFIX + x for x in COLUMNS_MOTION]
+COLUMNS_MOTION_DERIVS = [COLUMN_DERIV_PREFIX + x for x in COLUMNS_MOTION]
 COLUMNS_WITH_GPS_JUMP = ['axCG', 'ayCG', 'vxCG', 'vyCG', 'yawAngle', 'pitchAngle', 'rollAngle']
 COLUMNS_DERIV_WITH_GPS_JUMP = [COLUMN_DERIV_PREFIX + x for x in COLUMNS_WITH_GPS_JUMP]
 
@@ -87,7 +87,7 @@ def load(file_path):
 
 
 def stride_rows(df, stride):
-    return df[df.index % stride == (stride - 1)].reset_index(drop=True)
+    return df[df.index % stride == 0].reset_index(drop=True)
 
 
 def add_derivatives(df, stride, columns_to_deriv=COLUMNS_MOTION):
@@ -135,7 +135,7 @@ def stride_table_rows_and_max_pool_deriv(df, stride):
     df_orig = df[df.index % stride == (stride - 1)][COLUMNS_ALL].reset_index(drop=True)
 
     # max pool derivative columns
-    df_deriv = df.groupby(df.index // stride).max()[COLUMNS_DERIV].reset_index(drop=True)
+    df_deriv = df.groupby(df.index // stride).max()[COLUMNS_MOTION_DERIVS].reset_index(drop=True)
 
     return pandas.concat([df_orig, df_deriv], axis=1, sort=False)
 
@@ -176,7 +176,7 @@ def get_plotly_fig(df, title, columns, start=DEFAULT_START, stop=DEFAULT_STOP, s
 
         y = df[column].values[start:stop:step]
 
-        if max(abs(y)) > 1:
+        if max(abs(y)) > 2:
             yaxis = 'y2'
             name = column + ' (right axis)'
         else:
@@ -257,6 +257,17 @@ def get_data_sets(df, train_percent, dev_percent, test_percent, data_columns, la
     # associate input data (prior timestamp) & output labels (next timestamp) on single row
     df_data = df.iloc[:-1][data_columns].reset_index(drop=True)
     df_labels = df.iloc[1:][label_columns].reset_index(drop=True)
+
+    # change input/output column names, to ensure unique
+    data_map = {}
+    for col in data_columns:
+        data_map[col] = 'data_' + col
+    df_data.rename(index=str, columns=data_map, inplace=True)
+    label_map = {}
+    for col in label_columns:
+        label_map[col] = 'label_' + col
+    df_labels.rename(index=str, columns=label_map, inplace=True)
+
     df_combined = pandas.concat([df_data, df_labels], axis=1, sort=False)
     del df_data
     del df_labels
@@ -274,4 +285,4 @@ def get_data_sets(df, train_percent, dev_percent, test_percent, data_columns, la
     df_dev = df_combined.iloc[dev_rows[0]: dev_rows[1]]
     df_test = df_combined.iloc[test_rows[0]: test_rows[1]]
 
-    return df_train, df_dev, df_test
+    return df_train, df_dev, df_test, list(data_map.values()), list(label_map.values())
