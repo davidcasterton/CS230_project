@@ -30,8 +30,10 @@ COLUMNS_ALL = ['HDOP', 'PDOP', 'PPS', 'altitude', 'axCG', 'ayCG', 'azCG', 'brake
 COLUMNS_HUMAN_INPUT = ['brake', 'throttle', 'handwheelAngle']
 COLUMNS_LONGITUDINAL = ['throttle', 'brake', 'vxCG', 'pitchAngle']
 COLUMNS_LATERAL = ['handwheelAngle', 'vyCG', 'rollAngle', 'yawAngle']
-COLUMNS_MOTION = ['axCG', 'ayCG',  'pitchAngle', 'pitchRate', 'rollAngle', 'rollRate', 'vxCG', 'vyCG', 'wheelAccelFL',
-                  'wheelAccelFR', 'wheelAccelRL', 'wheelAccelRR', 'yawAngle', 'yawRate']
+COLUMNS_MOTION = ['axCG', 'ayCG', 'azCG', 'chassisAccelFL', 'chassisAccelFR', 'chassisAccelRL', 'chassisAccelRR',
+                  'deflectionFL', 'deflectionFR', 'horizontalSpeed',  # 'deflectionRL', 'deflectionRR',
+                  'pitchAngle', 'pitchRate', 'rollAngle', 'rollRate', 'vxCG', 'vyCG', 'vzCG',
+                  'wheelAccelFL', 'wheelAccelFR', 'wheelAccelRL', 'wheelAccelRR', 'yawAngle', 'yawRate']
 COLUMN_DERIV_PREFIX = 'deriv_'
 
 COLUMNS = copy.deepcopy(COLUMNS_ALL)
@@ -57,13 +59,13 @@ DEFAULT_IMAGE_WIDTH = 1000
 DEFAULT_IMAGE_HEIGHT = 500
 
 
-def get_all_file_paths(data_dir=DATA_DIR, exclude=['grandsport.parquet', '250lm.parquet']):
+def get_all_file_paths(data_dir=DATA_DIR):
     logger = logging.getLogger(common.LOG_ROOT)
     file_paths = []
 
     for dir_path, dir_names, file_names in os.walk(data_dir):
         for file_name in file_names:
-            if file_name.endswith('.parquet') and file_name not in exclude:
+            if file_name.endswith('.parquet'):
                 file_path = os.path.join(dir_path, file_name)
                 file_paths.append(file_path)
 
@@ -90,26 +92,32 @@ def stride_rows(df, stride):
     return df[df.index % stride == 0].reset_index(drop=True)
 
 
-def add_derivatives(df, stride, columns_to_deriv=COLUMNS_MOTION):
+def add_derivatives(df, strides, columns_to_deriv=COLUMNS_MOTION):
+    assert isinstance(strides, list) or isinstance(strides, range)
+
     logger = logging.getLogger(common.LOG_ROOT)
 
-    for column in columns_to_deriv:
-        new_column = COLUMN_DERIV_PREFIX + column
+    derivative_columns = []
+    for stride in strides:
+        for column in columns_to_deriv:
+            new_column = COLUMN_DERIV_PREFIX + '%s_' % stride + column
+            derivative_columns.append(new_column)
 
-        df[new_column] = df[column] - df[column].shift(stride)
+            df[new_column] = df[column] - df[column].shift(stride)
 
-    # correct for yawAngle sign flip
-    indexes = df.index[abs(df['deriv_yawAngle']) > 300]
-    for i in indexes:
-        df.at[i, 'deriv_yawAngle'] = (180 - abs(df.iloc[i]['yawAngle'])) + (180 - abs(df.iloc[i - stride]['yawAngle']))
+        # correct for yawAngle sign flip
+        deriv_yawAngle = 'deriv_%s_yawAngle' % stride
+        indexes = df.index[abs(df[deriv_yawAngle]) > 300]
+        for i in indexes:
+            df.at[i, deriv_yawAngle] = (180 - abs(df.iloc[i]['yawAngle'])) + (180 - abs(df.iloc[i - stride]['yawAngle']))
 
-    logger.debug('# deriv_yawAngle fixed: %s' % len(indexes))
+        logger.debug('# %s fixed: %s' % (deriv_yawAngle, len(indexes)))
 
     # replace NaN with zeros in deriv columns
-    values = {COLUMN_DERIV_PREFIX + x: 0 for x in columns_to_deriv}
-    df.fillna(value=values, inplace=True)
+    #values = {COLUMN_DERIV_PREFIX + x: 0 for x in columns_to_deriv}
+    #df.fillna(value=values, inplace=True)
 
-    return df
+    return df, derivative_columns
 
 
 def clean_discontinuities(df, stride, thresholds=DEFAULT_THRESHOLDS):
@@ -156,14 +164,17 @@ def discontinuity_generator(df, thresholds=DEFAULT_THRESHOLDS):
             yield column, index, df.iloc[index - 1: index + 2, :]
 
 
-def get_plotly_fig(df, title, columns, start=DEFAULT_START, stop=DEFAULT_STOP, step=DEFAULT_STEP):
+def get_plotly_fig(df, title, columns, start=DEFAULT_START, stop=DEFAULT_STOP, step=DEFAULT_STEP, x_axis=['time']):
     logger = logging.getLogger(common.LOG_ROOT)
     data = []
 
     if '/' in title:
         title = short_path(title)  # if title is path, reduce to 1 directory and file name
 
-    x = df['time'].values[start:stop:step]
+    try:
+        x = df[x_axis].values[start:stop:step]
+    except TypeError:
+        x = list(range(len(df)))
 
     # replace NaN
     values = {x: 0 for x in columns}
@@ -224,7 +235,7 @@ def write_image(fig, image_path, width=DEFAULT_IMAGE_WIDTH, height=DEFAULT_IMAGE
     return fig
 
 
-def plot(df, file_path, columns, title='', plot=True, write=False, start=DEFAULT_START, stop=DEFAULT_STOP, step=DEFAULT_STEP):
+def plot(df, file_path, columns, title='', plot=True, write=False, start=DEFAULT_START, stop=DEFAULT_STOP, step=DEFAULT_STEP, x_axis='time'):
     if start == 'middle':
         start = len(df) // 2
     if stop == 'middle':
@@ -241,7 +252,7 @@ def plot(df, file_path, columns, title='', plot=True, write=False, start=DEFAULT
                                   '-%s-%s-%s-%s' % (start, stop, step, columns_hash.hexdigest()[:7]) + '.jpeg')
         title = image_path + '<br>' + title
 
-    fig = get_plotly_fig(df, title, columns=columns, start=start, stop=stop, step=step)
+    fig = get_plotly_fig(df, title, columns=columns, start=start, stop=stop, step=step, x_axis=x_axis)
 
     if plot:
         plotly.offline.iplot(fig)
@@ -251,29 +262,41 @@ def plot(df, file_path, columns, title='', plot=True, write=False, start=DEFAULT
     return fig, image_path
 
 
-def get_data_sets(df, train_percent, dev_percent, test_percent, data_columns, label_columns):
+def get_data_sets(df, strides=range(1, 11), train_percent=0.9, dev_percent=0.05, test_percent=0.05):
     assert (train_percent + dev_percent + test_percent) == 1
 
-    # associate input data (prior timestamp) & output labels (next timestamp) on single row
-    df_data = df.iloc[:-1][data_columns].reset_index(drop=True)
-    df_labels = df.iloc[1:][label_columns].reset_index(drop=True)
+    # build data (input) DataFrame
+    df_data = copy.deepcopy(df)
+    df_data, deriv_columns = add_derivatives(df_data, strides=strides, columns_to_deriv=df_data.columns)
+    data_columns = list(df_data.columns)
 
-    # change input/output column names, to ensure unique
-    data_map = {}
-    for col in data_columns:
-        data_map[col] = 'data_' + col
-    df_data.rename(index=str, columns=data_map, inplace=True)
+    # build labels
+    df_labels = copy.deepcopy(df[COLUMNS_MOTION])
+    df_labels, deriv_columns = add_derivatives(df_labels, strides=[1], columns_to_deriv=COLUMNS_MOTION)
+    df_labels = df_labels[deriv_columns]
+
+    # update label column names to prepend "label_"
     label_map = {}
-    for col in label_columns:
+    for col in df_labels.columns:
         label_map[col] = 'label_' + col
     df_labels.rename(index=str, columns=label_map, inplace=True)
+    label_columns = df_labels.columns
 
-    df_combined = pandas.concat([df_data, df_labels], axis=1, sort=False)
+    # associate input data (prior timestamp) & output labels (next timestamp) on same row
+    df_data = df_data.iloc[:-1].reset_index(drop=True)
+    df_labels = df_labels.iloc[1:].reset_index(drop=True)
+
+    # concatenate data to labels
+    df_out = pandas.concat([df_data, df_labels], axis=1, sort=False)
     del df_data
     del df_labels
 
+    df_out.dropna(axis=0, inplace=True)
+
+    #df_out = df_out.iloc[len(strides):].reset_index(drop=True)
+
     # shuffle order of combined data frame
-    df_combined = df_combined.sample(frac=1)  #.reset_index(drop=True)
+    df_out = df_out.sample(frac=1)
 
     # set indexes to split across 3 sets
     train_rows = (0, round(len(df) * train_percent))
@@ -281,8 +304,8 @@ def get_data_sets(df, train_percent, dev_percent, test_percent, data_columns, la
     test_rows = (dev_rows[1], dev_rows[1] + round(len(df) * test_percent))
 
     # split into 3 sets
-    df_train = df_combined.iloc[train_rows[0]: train_rows[1]]
-    df_dev = df_combined.iloc[dev_rows[0]: dev_rows[1]]
-    df_test = df_combined.iloc[test_rows[0]: test_rows[1]]
+    df_train = df_out.iloc[train_rows[0]: train_rows[1]]
+    df_dev = df_out.iloc[dev_rows[0]: dev_rows[1]]
+    df_test = df_out.iloc[test_rows[0]: test_rows[1]]
 
-    return df_train, df_dev, df_test, list(data_map.values()), list(label_map.values())
+    return df_train, df_dev, df_test, data_columns, label_columns
