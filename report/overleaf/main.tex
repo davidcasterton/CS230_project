@@ -37,21 +37,11 @@ Vehicle dynamics simulation can achieve excellent results from manually crafted 
 \section{Introduction}	
 A key challenge to bringing autonomous vehicles to market is proving they can safely operate within a very large state space of potential scenarios and associated sensor inputs. Simulation is one of the leading techniques being pursued to make this proof, due to the promise of scalable parallelization for rapid feedback and eventual deep exploration of the operational state space. However, before a simulator can meaningfully inform how a specific real-world vehicle will perform, the accuracy of the simulation must be well understood and refined to be within acceptable bounds.
 
-This project evaluated if simulated vehicle movement can be improved by learning unmodeled attributes from vehicle specific data. Results show that training Long Short Term Memory (LSTM) Recurrent Neural Networks (RNN) for end-to-end learning of vehicle movement can output next movements with plausible results for some movement features, but that end-to-end learning results alone do not appear to outperform physics modeling. LSTM experiments were performed with the input of variable lengths of recent history from vehicle movement and vehicle control input, and output as the next update for vehicle movement. Related work indicates that joint usage of physics modeling and novel LSTM architectures can achieve better results than physics modeling alone.
+This project evaluated if simulated vehicle movement can be improved by learning unmodeled attributes from vehicle specific data. Results show that training Long Short Term Memory (LSTM) Recurrent Neural Networks (RNN) for end-to-end learning of vehicle movement can output next movements with plausible results for some movement features, but that end-to-end learning results alone do not appear to outperform physics modeling. LSTM experiments were performed with the input of variable lengths of recent history from vehicle movement and control, and output as the next update for vehicle movement. Related work indicates that joint usage of physics modeling and novel LSTM architectures can achieve better results than physics modeling alone.
 
 \section{Related work}
 
-\subsection{Vehicle dynamics modeling}
-
-The field of vehicle dynamics modeling has been well studied \cite{guiggiani2014science, jazar2017vehicle, popp2010ground, schramm2014vehicle} and is yielding excellent results. However these techniques are limited by the complexity that is manually added into the model, can be time consuming and expensive to tune for a real-world vehicle, and for real-time applications accuracy is competing with the available real-time compute budget.
-
-\subsection{End-to-end deep learning vehicle dynamics}
-
-\cite{bojarski2016end} explores end-to-end Deep Learning (DL) all the way from camera pixels to vehicle actuation output, this does not focus specifically on vehicle dynamics but presents a surprisingly successful extreme for the limit of end-to-end DL in vehicles.
-
-\subsection{Unifying physics and deep learning for physical movement}
-
-In \cite{shi2018neural, zeng2019tossingbot} techniques are presented to unify physics models with DNN's, with results outperforming physics models alone. \cite{shi2018neural} presents a nominal dynamics model combined with a DNN to learn how to control multi-rotor drone movement and landing. This solution utilizes modeling for the well known aspects of the problem however shows that extending modeling with a DNN resulted in better performance than a baseline control system, and performance generalized better to data outside the training domain.
+\cite{guiggiani2014science, jazar2017vehicle, popp2010ground, schramm2014vehicle} are examples from the mature field of vehicle dynamics modeling, which yields excellent results however is limited by the manual effort put in to the physical modeling. \cite{bojarski2016end} explores end-to-end Deep Learning (DL) all the way from camera pixels to vehicle actuation output, this does not focus specifically on vehicle dynamics but presents a surprisingly successful extreme for the limit of end-to-end DL in vehicles. \cite{shi2018neural, zeng2019tossingbot} present techniques to unify physics models with DNN's, with results outperforming physics models alone. \cite{shi2018neural} specifically presents a nominal dynamics model combined with a DNN to learn how to control multi-rotor drone movement and landing, which utilizes modeling for the well known aspects of the problem then extends modeling with a DNN resulted in better performance than a baseline control system.
 
 \section{Dataset and Features}
 
@@ -98,11 +88,9 @@ This data set was recorded at 1000 Hz, however since some signals only update at
 
 \subsection{Hand engineering features into data}
 
-The initial method pursued was to hand engineer features into the input data set that were considered to optimize for learning. The hypothesis was to train a neural network using all input columns available to output the change in position and orientation for the next time step. To accomplish this additional columns were appended to input data with the discrete derivatives of position and orientation between the current time \textit{t} and \textit{t+1}. Then to avoid the idle times show in Figures \ref{fig:trace1} and \ref{fig:trace2} disproportionately impacting the training, dev, or test set, all rows were shuffled to create an equal distribution across a file. Once a file had an equal distribution the rows were split 90\% training, 5\% dev, 5\% test, then the columns were separated so original columns became input features and the new discrete derivatives became output labels.
+The initial method pursued was to hand engineer features into the input data set that were considered to optimize for learning. The hypothesis was to train a neural network using all input columns available to output the change in position and orientation for the next time step. To accomplish this additional columns were appended to input data with the discrete derivatives of position and orientation between the current time \textit{t} and \textit{t+1}. Then to avoid the idle times shown in Figures \ref{fig:trace1} and \ref{fig:trace2} disproportionately impacting the training, dev, or test set, all rows were shuffled to create an equal distribution across a file. Once a file had an equal distribution the rows were split 90\% training, 5\% dev, 5\% test, then the columns were separated so original columns became input features and the new discrete derivatives became output labels.
 
-Sequential TensorFlow models composed of a variable number of dense layers were trained against the data strategy described above, with limited success. After spending more time with the data it became apparent that this strategy was not adequately accounting for the delay between human inputs (steering, brake, throttle) being given to the vehicle and the resulting actuation (motor, brake, steering response) - training against labels for the discrete derivative of the next time step only did not give adequate time for the input to result in a learnable actuation response. 
-
-A visual analysis was performed to attempt to identify a reasonable actuation response delay, this method was modified to add columns to the input data containing the difference between the current time step and multiple past time steps (e.g. (current - 10ms ago), (current - 20ms ago), etc.). This modification was quickly abandoned in favor of pursuing a network architecture that could learn temporal sequences.
+Sequential TensorFlow models composed of a variable number of dense layers were trained against the data strategy described above, with limited success. After spending more time with the data it became apparent that this strategy was not adequately accounting for the delay between human inputs (steering, brake, throttle) being given to the vehicle and the resulting actuation (motor, brake, steering response) - training against labels for the discrete derivative of the next time step only did not give adequate time for the input to result in a learnable actuation response. A brief attempt was made to hand engineer features with longer input/output relationships, however this was quickly abandoned in favor of pursuing a network architecture that could learn temporal sequences.
 
 \subsection{Long Short-Term Memory Recurrent Neural Networks}
 
@@ -111,13 +99,13 @@ To handle the problem of unknown temporal delays between vehicle input and outpu
 \begin{figure}[h!]
   \centering
   \begin{minipage}[b]{0.49\textwidth}
-    \includegraphics[width=\textwidth]{LSTM_arch}
+    \includegraphics[width=\textwidth, height=4.75cm]{LSTM_arch}
     \caption{LSTM network architecture.}
     \label{fig:LSTM_arch}
   \end{minipage}
   \hfill
   \begin{minipage}[b]{0.49\textwidth}
-    \includegraphics[width=\textwidth]{LSTM_cell}
+    \includegraphics[width=\textwidth, height=4.75cm]{LSTM_cell}
     \caption{LSTM cell from \cite{ng_katanforoosh_bensouda_mourri}}
     \label{fig:LSTM_cell}
   \end{minipage}
@@ -165,82 +153,50 @@ Data was then separated into 3 dimensions: \# of input features (n\_x), \# of da
 
 \section{Experiments/Results/Discussion}
 
-Appendix \ref{appendix:models} shows a table of attempted model parameters, hyperparameters, and input/output data sets (further defined in Appendix \ref{appendix:data}), and the resulting loss and mean absolute error for each model. Source code for models is available \cite{casterton_2019}.
+Appendix \ref{appendix:models} shows a table of attempted model parameters, hyperparameters, and input/output data sets (further defined in Appendix \ref{appendix:data}), and the resulting loss and mean absolute error for each model. Source code for models is available \cite{casterton_2019}. The models that resulted in optimal results involved an input sequence length of ~150 (1.5 seconds worth of history), and took about 5 hours to train on an NVIDIA GTX 1080 Ti.
 
-For example, Model ID 80 from Appendix \ref{appendix:models} achieved a mean absolute error of 0.95 when trained to data set group x3 (Appendix \ref{appendix:datax3}) and output group y4 (Appendix  \ref{appendix:datay4}). Model 80 was composed of 3 layers: 
-\begin{enumerate}
+For example, Model ID 80 from Appendix \ref{appendix:models} achieved a mean absolute error of 0.95 when trained to data set group x3 (Appendix \ref{appendix:datax3}) and output group y4 (Appendix  \ref{appendix:datay4}). Model 80 was composed of 3 layers:
+ 
+ \begin{enumerate}
     \item LSTM layer 1
     \begin{itemize}
         \item input sizes: n\_x = 20, m = 132,645, T$_{\text{x}}$ = 160
         \item output sizes: n\_y = 160, m = 132,645, T$_{\text{x}}$ = 160
-        \item parameters: 115840
     \end{itemize}
     \item LSTM layer 2
     \begin{itemize}
         \item input sizes: n\_x = 160, m = 132,645, T$_{\text{x}}$ = 160
         \item output sizes: n\_y = 160, m = 132,645
-        \item parameters: 205440
     \end{itemize}
     \item Dense layer
     \begin{itemize}
         \item input sizes: n\_x = 160, m = 132,645
         \item output sizes: n\_y = 10, m = 132,645
-        \item parameters: 1610
     \end{itemize}
 \end{enumerate}
  
- \begin{figure}[h!]
-  \centering
-  \begin{minipage}[b]{0.49\textwidth}
-    \includegraphics[width=\textwidth]{model80/out_yawAngle.png}
-    \caption{Model 80 yaw angle test set actual vs predicted.}
-    \label{fig:model80_yaw}
-  \end{minipage}
-  \hfill
-  \begin{minipage}[b]{0.49\textwidth}
-    \includegraphics[width=\textwidth]{model80/out_vxCG.png}
-    \caption{Model 80 longitudinal velocity test set actual vs predicted.}
-    \label{fig:model80_vx}
-  \end{minipage}
-\end{figure}
-
-\begin{figure}[h!]
-  \centering
-  \begin{minipage}[b]{0.49\textwidth}
-    \includegraphics[width=\textwidth]{model80/out_vyCG.png}
-    \caption{Model 80 lateral velocity test set actual vs predicted.}
-    \label{fig:model80_vy}
-  \end{minipage}
-  \hfill
-  \begin{minipage}[b]{0.49\textwidth}
-    \includegraphics[width=\textwidth]{model80/out_wheelAccelFL.png}
-    \caption{Model 80 front left wheel acceleration test set actual vs predicted.}
-    \label{fig:model80_wheel}
-  \end{minipage}
-\end{figure}
- 
- Figures \ref{fig:model80_yaw}, \ref{fig:model80_vx}, \ref{fig:model80_vy}, \ref{fig:model80_wheel} are zoomed-out plots of Model 80 incrementally predicting the next value of a test set file. Figures \ref{fig:model80_zoom_vx}, \ref{fig:model80_zoom_yaw}, \ref{fig:model80_zoom_wheel} are zoomed-in plots of Model 80 predictions. These figures visualize that different vehicle dynamic features were learned with variable success: 
+ Figures \ref{fig:model80_zoom_vx}, \ref{fig:model80_zoom_yaw}, \ref{fig:model80_zoom_wheel} are zoomed-in plots of Model 80 predictions. These figures visualize that different vehicle dynamic features were learned with variable success: 
  \begin{itemize}
-     \item \textbf{longitudinal velocity}: (Figures \ref{fig:model80_vx} and \ref{fig:model80_zoom_vx}) Mean Squared Error (MSE) of 1.88 with an input value range of 61.72, resulting in MSE of 3.04\% of the input range. Longitudinal velocity appears to have been successfully learned as hoped due to strong correlation with the throttle and brake pedal input, after some time delay. However the model appears to accumulate most of its error when input values go beyond 50, future work would be needed to understand why the model appears to be failing to output values much beyond 50.
-     \item \textbf{lateral velocity}: (Figure \ref{fig:model80_vy}) MSE of 0.27 on input range of 4.04, resulting in MSE of 6.91\% of range. Lateral velocity was nowhere near as successful at being learned as longitudinal velocity, this is likely due to a weaker correlation between steering input and lateral velocity as well as a significantly smaller input range for this feature.
-     \item \textbf{yaw angle}: (Figures \ref{fig:model80_yaw} and \ref{fig:model80_zoom_yaw}) MSE of 2.96 on input range of 359.98, resulting in MSE of 0.82\% of range. Yaw angle appears to have been quite successfully learned as hoped due to strong correlation with the steering wheel angle. It is surprising how well the model was able to handle yaw angle discontinuities when it exceeds +/-180, how this is being accomplished would benefit from further investigation.
-     \item \textbf{wheel acceleration}: (Figures \ref{fig:model80_wheel}, \ref{fig:model80_zoom_wheel}) MSE of 1.53 on input range of 83.88, resulting in MSE of 1.83\% of range. Wheel acceleration data appears to be reporting with too high of a frequency for the model, which is resulting in the model appearing to low-pass filter this feature.
+     \item \textbf{longitudinal velocity}: (Figure \ref{fig:model80_zoom_vx}) Mean Squared Error (MSE) of 1.88 with an input value range of 61.72, resulting in MSE of 3.04\% of the input range. Longitudinal velocity appears to have been successfully learned as hoped due to strong correlation with the throttle and brake pedal input, after some time delay. However the model appears to accumulate most of its error when input values go beyond 50, future work would be needed to understand why the model appears to be failing to output values much beyond 50.
+     \item \textbf{lateral velocity}: MSE of 0.27 on input range of 4.04, resulting in MSE of 6.91\% of range. Lateral velocity was not as successful at being learned as longitudinal velocity, this is likely due to a weaker correlation between steering input and lateral velocity as well as a significantly smaller input range for this feature.
+     \item \textbf{yaw angle}: (Figure \ref{fig:model80_zoom_yaw}) MSE of 2.96 on input range of 359.98, resulting in MSE of 0.82\% of range. Yaw angle appears to have been quite successfully learned as hoped due to strong correlation with the steering wheel angle. It is surprising how well the model was able to handle yaw angle discontinuities when it exceeds +/-180, how this is being accomplished would benefit from further investigation.
+     \item \textbf{wheel acceleration}: (Figure \ref{fig:model80_zoom_wheel}) MSE of 1.53 on input range of 83.88, resulting in MSE of 1.83\% of range. Wheel acceleration data appears to be reporting with too high of a frequency for the model, which is resulting in the model appearing to low-pass filter this feature.
  \end{itemize}
 
 \begin{figure}[!ht]
-\includegraphics[width=\textwidth, height=5cm]{model80/zoom_vxCG.png}
+\includegraphics[width=\textwidth]{model80/zoom_vxCG.png}
 \caption{Model 80 zoomed-in longitudinal velocity test set actual vs predicted.}
 \label{fig:model80_zoom_vx}
 \end{figure}
 
 \begin{figure}[!ht]
-\includegraphics[width=\textwidth, height=5cm]{model80/zoom_yawAngle.png}
+\includegraphics[width=\textwidth]{model80/zoom_yawAngle.png}
 \caption{Model 80 zoomed-in yaw angle test set actual vs predicted.}
 \label{fig:model80_zoom_yaw}
 \end{figure}
 
 \begin{figure}[!ht]
-\includegraphics[width=\textwidth, height=5cm]{model80/zoom_wheelAccelFL.png}
+\includegraphics[width=\textwidth]{model80/zoom_wheelAccelFL.png}
 \caption{Model 80 zoomed-in front left wheel acceleration test set actual vs predicted.}
 \label{fig:model80_zoom_wheel}
 \end{figure}
