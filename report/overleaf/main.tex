@@ -153,7 +153,7 @@ Data was then separated into 3 dimensions: \# of input features (n\_x), \# of da
 
 \section{Experiments/Results/Discussion}
 
-Appendix \ref{appendix:models} shows a table of attempted model parameters, hyperparameters, and input/output data sets (further defined in Appendix \ref{appendix:data}), and the resulting loss and mean absolute error for each model. Source code for models is available \cite{casterton_2019}. The models that resulted in optimal results involved an input sequence length of ~150 (1.5 seconds worth of history), and took about 5 hours to train on an NVIDIA GTX 1080 Ti.
+Appendix \ref{appendix:models} shows a table of attempted model parameters, hyperparameters, and input/output data sets (further defined in Appendix \ref{appendix:data}), and the resulting loss and mean absolute error for each model. Source code for models is available \cite{casterton_2019}. The models that resulted in optimal results involved an input sequence length from 100-200 (1-2 seconds worth of history), and took about 5 hours to train on an NVIDIA GTX 1080 Ti.
 
 For example, Model ID 80 from Appendix \ref{appendix:models} achieved a mean absolute error of 0.95 when trained to data set group x3 (Appendix \ref{appendix:datax3}) and output group y4 (Appendix  \ref{appendix:datay4}). Model 80 was composed of 3 layers:
  
@@ -182,6 +182,14 @@ For example, Model ID 80 from Appendix \ref{appendix:models} achieved a mean abs
      \item \textbf{yaw angle}: (Figure \ref{fig:model80_zoom_yaw}) MSE of 2.96 on input range of 359.98, resulting in MSE of 0.82\% of range. Yaw angle appears to have been quite successfully learned as hoped due to strong correlation with the steering wheel angle. It is surprising how well the model was able to handle yaw angle discontinuities when it exceeds +/-180, how this is being accomplished would benefit from further investigation.
      \item \textbf{wheel acceleration}: (Figure \ref{fig:model80_zoom_wheel}) MSE of 1.53 on input range of 83.88, resulting in MSE of 1.83\% of range. Wheel acceleration data appears to be reporting with too high of a frequency for the model, which is resulting in the model appearing to low-pass filter this feature.
  \end{itemize}
+
+Additional models were trained to single outputs and were able to achieve the following results:
+
+\begin{itemize}
+    \item Model 95 was trained to longitudinal velocity only and achieve MSE of 0.43.
+    \item Model 90 was trained to lateral velocity only and achieved MSE of 0.09.
+    \item Model 97 was trained to yaw angle only and achieved MSE of 1.89.
+\end{itemize}
 
 \begin{figure}[!ht]
 \includegraphics[width=\textwidth]{model80/zoom_vxCG.png}

@@ -1,0 +1,1 @@
+{"sequence_length": 160, "cols_x": "x3", "cols_y": "y4", "learning_rate": 0.005, "learning_rate_decay": 1e-05, "batch_norm": false, "dropout": 0.1, "lstm_units": 160, "num_data_files": 4}
