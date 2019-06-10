@@ -20,8 +20,8 @@ from . import common
 DATA_DIR = os.path.join(os.path.abspath(__file__).split('CS230_project')[0], 'CS230_project', 'data')
 
 COLUMNS_ALL = ['HDOP', 'PDOP', 'PPS', 'altitude', 'axCG', 'ayCG', 'azCG', 'brake', 'chassisAccelFL', 'chassisAccelFR',
-                'chassisAccelRL', 'chassisAccelRR', 'clutch', 'deflectionFL', 'deflectionFR', 'deflectionRL',
-                'deflectionRR', 'distance', 'engineSpeed', 'gpsOrientMode', 'gpsPosMode', 'gpsTime', 'gpsVelMode',
+                'chassisAccelRL', 'chassisAccelRR', 'clutch', 'deflectionFL', 'deflectionFR',
+                'distance', 'engineSpeed', 'gpsOrientMode', 'gpsPosMode', 'gpsTime', 'gpsVelMode',
                 'handwheelAngle', 'horizontalSpeed', 'latitude', 'longitude', 'numSVsTracked', 'orientAccuracy_heading',
                 'orientAccuracy_pitch', 'orientAccuracy_roll', 'pitchAngle', 'pitchRate', 'posAccuracy_down',
                 'posAccuracy_east', 'posAccuracy_north', 'rollAngle', 'rollRate', 'sideSlip', 'throttle', 'time',
@@ -46,11 +46,11 @@ COLUMNS_WITH_GPS_JUMP = ['axCG', 'ayCG', 'vxCG', 'vyCG', 'yawAngle', 'pitchAngle
 COLUMNS_DERIV_WITH_GPS_JUMP = [COLUMN_DERIV_PREFIX + x for x in COLUMNS_WITH_GPS_JUMP]
 
 DEFAULT_THRESHOLDS = [
-    ('deriv_yawAngle', 10),
-    ('deriv_pitchAngle', 2),
-    ('deriv_rollAngle', 2),
-    ('deriv_vxCG', 10),
-    ('deriv_vyCG', 10)
+    ('yawAngle', 10),
+    ('pitchAngle', 2),
+    ('rollAngle', 2),
+    ('vxCG', 10),
+    ('vyCG', 10)
 ]
 DEFAULT_START = 0
 DEFAULT_STOP = None
@@ -123,17 +123,30 @@ def add_derivatives(df, strides, columns_to_deriv=COLUMNS_MOTION):
 def clean_discontinuities(df, stride, thresholds=DEFAULT_THRESHOLDS):
     logger = logging.getLogger(common.LOG_ROOT)
 
-    for column, threshold in thresholds:
+    for col_end, threshold in thresholds:
         # find indexes outside of threshold
+        column = None
+        for _col in df.columns:
+            if _col.startswith('deriv') and _col.endswith(col_end):
+                column = _col
+                break
+        if not column:
+            logger.warning('could not find %s', col_end)
+
         indexes = df.index[(df[column] > threshold) | (df[column] < -threshold)]
 
+        columns_deriv_with_gps_jump = []
+        for _col_end in COLUMNS_WITH_GPS_JUMP:
+            for _col in df.columns:
+                if _col.startswith('deriv') and _col.endswith(_col_end):
+                    columns_deriv_with_gps_jump.append(_col)
         for i in indexes:
             if numpy.isnan(df.iloc[i - stride]['altitude']):
                 logger.debug('GPS NaN at %s : %s -> %s', i,
-                        df.iloc[i][COLUMNS_DERIV_WITH_GPS_JUMP].to_string(header=False, index=False).replace(os.linesep, ','),
-                        df.iloc[i - 1][COLUMNS_DERIV_WITH_GPS_JUMP].to_string(header=False, index=False).replace(os.linesep, ','))
+                        df.iloc[i][columns_deriv_with_gps_jump].to_string(header=False, index=False).replace(os.linesep, ','),
+                        df.iloc[i - 1][columns_deriv_with_gps_jump].to_string(header=False, index=False).replace(os.linesep, ','))
 
-                df.at[i, COLUMNS_DERIV_WITH_GPS_JUMP] = df.iloc[i - stride][COLUMNS_DERIV_WITH_GPS_JUMP]
+                df.at[i, columns_deriv_with_gps_jump] = df.iloc[i - stride][columns_deriv_with_gps_jump]
 
     return df
 
@@ -187,12 +200,11 @@ def get_plotly_fig(df, title, columns, start=DEFAULT_START, stop=DEFAULT_STOP, s
 
         y = df[column].values[start:stop:step]
 
+        name = column
+        yaxis = 'y'
         if max(abs(y)) > 2:
             yaxis = 'y2'
-            name = column + ' (right axis)'
-        else:
-            yaxis = 'y'
-            name = column
+            name += ' (right axis)'
 
         trace = plotly.graph_objs.Scatter(
             x=x,
@@ -212,7 +224,8 @@ def get_plotly_fig(df, title, columns, start=DEFAULT_START, stop=DEFAULT_STOP, s
         yaxis2=dict(
             overlaying='y',
             side='right'
-        )
+        ),
+        legend=dict(orientation="h")
     )
 
     fig = plotly.graph_objs.Figure(data=data, layout=layout)
