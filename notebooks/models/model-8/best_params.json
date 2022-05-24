@@ -1,0 +1,1 @@
+{"sequence_length": 200, "cols_x": "x3", "cols_y": "vyCG", "learning_rate": 0.005, "learning_rate_decay": 5e-05, "batch_norm": false, "dropout": 0.1, "lstm_units": 200, "num_data_files": 4, "loss": 0.02191925780864404, "mean_absolute_error": 0.08911532908678055, "session": "models/model-8/20190607010106", "time": "36:22"}

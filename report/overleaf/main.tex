@@ -1,0 +1,266 @@
+\documentclass{article}
+\usepackage[english]{babel}
+\usepackage[final,nonatbib]{nips_2017}
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{graphicx}
+\usepackage{appendix}
+\usepackage[backend=biber, style=numeric, citestyle=numeric]{biblatex}
+\usepackage{longtable}
+\addbibresource{references.bib} %Imports bibliography file
+
+\title{Long Short-Term Vehicle Dynamics}
+\author{
+  David Casterton\\
+  Stanford University, CS230 Spring 2019\\
+  \texttt{david.casterton @stanford.edu / @gmail.com} \\
+}
+
+\begin{document}
+
+\begin{center}
+\includegraphics[width=3cm, height=0.7cm]{CS230}
+\end{center}
+
+\maketitle
+
+\begin{abstract}
+Vehicle dynamics simulation can achieve excellent results from manually crafted physical models, however manually crafting models can be time consuming, financially and computationally expensive, difficult to tune details, and difficult to generalize. This project focused on potential roles of Deep Neural Network's (DNNs) to improve vehicle dynamics simulation by utilizing data to learn the model.
+\end{abstract}
+
+\section{Introduction}	
+A key challenge to bringing autonomous vehicles to market is proving they can safely operate within a very large state space of potential scenarios and associated sensor inputs. Simulation is one of the leading techniques being pursued to make this proof, due to the promise of scalable parallelization for rapid feedback and eventual deep exploration of the operational state space. However, before a simulator can meaningfully inform how a specific real-world vehicle will perform, the accuracy of the simulation must be well understood and refined to be within acceptable bounds.
+
+This project evaluated if simulated vehicle movement can be improved by learning unmodeled attributes from vehicle specific data. Results show that training Long Short Term Memory (LSTM) Recurrent Neural Networks (RNN) for end-to-end learning of vehicle movement can output next movements with plausible results for some movement features, but that end-to-end learning results alone do not appear to outperform physics modeling. LSTM experiments were performed with the input of variable lengths of recent history from vehicle movement and control, and output as the next update for vehicle movement. Related work indicates that joint usage of physics modeling and novel LSTM architectures can achieve better results than physics modeling alone.
+
+\section{Related work}
+
+\cite{guiggiani2014science, jazar2017vehicle, popp2010ground, schramm2014vehicle} are examples from the mature field of vehicle dynamics modeling, which yields excellent results however is limited by the manual effort put in to the physical modeling. \cite{bojarski2016end} explores end-to-end Deep Learning (DL) all the way from camera pixels to vehicle actuation output, this does not focus specifically on vehicle dynamics but presents a surprisingly successful extreme for the limit of end-to-end DL in vehicles. \cite{shi2018neural, zeng2019tossingbot} present techniques to unify physics models with DNN's, with results outperforming physics models alone. \cite{shi2018neural} specifically presents a nominal dynamics model combined with a DNN to learn how to control multi-rotor drone movement and landing, which utilizes modeling for the well known aspects of the problem then extends modeling with a DNN resulted in better performance than a baseline control system.
+
+\section{Dataset and Features}
+
+Data for this project was acquired from \cite{revs_vehicle_dynamics_database}, which contains 22 files of vehicle dynamics recorded from an expert driving a 1965 Ferrari in 2013 and 2014 at \textit{Monterey Motorsports Reunion} and \textit{Targa Sixty-Six} events. This data set includes the notable features of: physical inputs to the vehicle (steering, brake, throttle, clutch), GPS position (latitude, longitude, altitude), velocity and acceleration of the center of gravity (x, y, z), orientation angle and rate (roll, pitch, yaw), accuracy of position and orientation, vertical chassis accelerations, suspension deflections, and wheel accelerations.
+
+\begin{figure}[h!]
+  \centering
+  \begin{minipage}[b]{0.49\textwidth}
+    \includegraphics[width=\textwidth]{20130810_01_01_01_grandsport-0-None-100-313a19e.jpeg}
+    \caption{Steering, brake, throttle from 2013.}
+    \label{fig:trace1}
+  \end{minipage}
+  \hfill
+  \begin{minipage}[b]{0.49\textwidth}
+    \includegraphics[width=\textwidth]{20140221_03_02_03_250lm-0-None-100-313a19e.jpeg}
+    \caption{Steering, brake, throttle from 2014.}
+    \label{fig:trace2}
+  \end{minipage}
+\end{figure}
+
+Figures \ref{fig:trace1} and \ref{fig:trace2} show zoomed-out examples of full files, which indicate idle time at the start and end of files, with repeated maneuvers in the middle from race laps.
+
+\begin{figure}[h!]
+  \centering
+  \begin{minipage}[b]{0.49\textwidth}
+    \includegraphics[width=\textwidth]{20130810_01_01_01_grandsport-12500-13000-1-cd12f64.jpeg}
+    \caption{Zoomed-in longitudinal signals.}
+    \label{fig:longitudinal}
+  \end{minipage}
+  \hfill
+  \begin{minipage}[b]{0.49\textwidth}
+    \includegraphics[width=\textwidth]{20130810_01_01_01_grandsport-12500-13000-1-9103b57}
+    \caption{Zoomed-in lateral signals.}
+    \label{fig:lateral}
+  \end{minipage}
+\end{figure}
+
+Figures \ref{fig:longitudinal} and \ref{fig:lateral} show zoomed-in example data from the data set with strong correlations. Figure \ref{fig:longitudinal} shows that throttle and brake have a strong correlation with longitudinal velocity (vxCG). Figure \ref{fig:lateral} shows that hand wheel angle has a strong correlation with lateral velocity (vyCG) and yaw angle, however these correlations have some unintuitive attributes: hand wheel angle has an inverted sign from lateral velocity (vyCG), and yaw angle has a discontinuity at +/-180 where it inverts its sign.
+
+This data set was recorded at 1000 Hz, however since some signals only update at 100Hz I chose to sample the data for training with a stride of 10. Some signals I considered critical (velocity, acceleration, orientation) appear to have originated from a GPS sensor that occasionally stopped updating, which resulted in those signals being temporarily incorrect then jumping with a discontinuity. To sanitize GPS discontinuities from this data set all rows were removed that contained \textit{null} for GPS altitude.
+
+
+\section{ Methods }
+
+\subsection{Hand engineering features into data}
+
+The initial method pursued was to hand engineer features into the input data set that were considered to optimize for learning. The hypothesis was to train a neural network using all input columns available to output the change in position and orientation for the next time step. To accomplish this additional columns were appended to input data with the discrete derivatives of position and orientation between the current time \textit{t} and \textit{t+1}. Then to avoid the idle times shown in Figures \ref{fig:trace1} and \ref{fig:trace2} disproportionately impacting the training, dev, or test set, all rows were shuffled to create an equal distribution across a file. Once a file had an equal distribution the rows were split 90\% training, 5\% dev, 5\% test, then the columns were separated so original columns became input features and the new discrete derivatives became output labels.
+
+Sequential TensorFlow models composed of a variable number of dense layers were trained against the data strategy described above, with limited success. After spending more time with the data it became apparent that this strategy was not adequately accounting for the delay between human inputs (steering, brake, throttle) being given to the vehicle and the resulting actuation (motor, brake, steering response) - training against labels for the discrete derivative of the next time step only did not give adequate time for the input to result in a learnable actuation response. A brief attempt was made to hand engineer features with longer input/output relationships, however this was quickly abandoned in favor of pursuing a network architecture that could learn temporal sequences.
+
+\subsection{Long Short-Term Memory Recurrent Neural Networks}
+
+To handle the problem of unknown temporal delays between vehicle input and output actuations, a RNN was chosen due to its ability to make decisions from a temporal sequence \cite{karpathy2015}, with the hope that would enable relationships to be learned with unknown temporal delays.
+
+\begin{figure}[h!]
+  \centering
+  \begin{minipage}[b]{0.49\textwidth}
+    \includegraphics[width=\textwidth, height=4.75cm]{LSTM_arch}
+    \caption{LSTM network architecture.}
+    \label{fig:LSTM_arch}
+  \end{minipage}
+  \hfill
+  \begin{minipage}[b]{0.49\textwidth}
+    \includegraphics[width=\textwidth, height=4.75cm]{LSTM_cell}
+    \caption{LSTM cell from \cite{ng_katanforoosh_bensouda_mourri}}
+    \label{fig:LSTM_cell}
+  \end{minipage}
+\end{figure}
+
+Figures \ref{fig:LSTM_arch} and \ref{fig:LSTM_cell} show an LSTM's network architecture and the contents of a single cell within the network models. The LSTM cell is primarily composed of the following attributes: forget gate, update gate, and output gate. These gates are defined by the following equations from \cite{ng_katanforoosh_bensouda_mourri}:
+
+\subsubsection{Forget Gate}
+
+\begin{equation}
+\Gamma_f^{\langle t \rangle} = \sigma(W_f[a^{\langle t-1 \rangle}, x^{\langle t \rangle}] + b_f)
+\label{eq:forget_gate}
+\end{equation}
+
+\subsubsection{Update Gate}
+
+\begin{equation}
+\Gamma_u^{\langle t \rangle} = \sigma(W_u[a^{\langle t-1 \rangle}, x^{\{t\}}] + b_u)
+\label{eq:update_gate1}
+\end{equation}
+
+\begin{equation}
+\tilde{c}^{\langle t \rangle} = \tanh(W_c[a^{\langle t-1 \rangle}, x^{\langle t \rangle}] + b_c)
+\label{eq:update_gate2}
+\end{equation}
+
+\begin{equation}
+c^{\langle t \rangle} = \Gamma_f^{\langle t \rangle}* c^{\langle t-1 \rangle} + \Gamma_u^{\langle t \rangle} *\tilde{c}^{\langle t \rangle}
+\label{eq:update_gate3}
+\end{equation}
+
+\subsubsection{Output Gate}
+
+\begin{equation}
+\Gamma_u^{\langle t \rangle} = \sigma(W_u[a^{\langle t-1 \rangle}, x^{\{t\}}] + b_u)
+\label{eq:output_gate1}
+\end{equation}
+
+\begin{equation}
+a^{\langle t \rangle} = \Gamma_o^{\langle t \rangle}* \tanh(c^{\langle t \rangle})
+\label{eq:output_gate2}
+\end{equation}
+
+Data was then separated into 3 dimensions: \# of input features (n\_x), \# of data samples (m), sequence length (T$_{\text{x}}$).
+
+\section{Experiments/Results/Discussion}
+
+Appendix \ref{appendix:models} shows a table of attempted model parameters, hyperparameters, and input/output data sets (further defined in Appendix \ref{appendix:data}), and the resulting loss and mean absolute error for each model. Source code for models is available \cite{casterton_2019}. The models that resulted in optimal results involved an input sequence length from 100-200 (1-2 seconds worth of history), and took about 5 hours to train on an NVIDIA GTX 1080 Ti.
+
+For example, Model ID 80 from Appendix \ref{appendix:models} achieved a mean absolute error of 0.95 when trained to data set group x3 (Appendix \ref{appendix:datax3}) and output group y4 (Appendix  \ref{appendix:datay4}). Model 80 was composed of 3 layers:
+ 
+ \begin{enumerate}
+    \item LSTM layer 1
+    \begin{itemize}
+        \item input sizes: n\_x = 20, m = 132,645, T$_{\text{x}}$ = 160
+        \item output sizes: n\_y = 160, m = 132,645, T$_{\text{x}}$ = 160
+    \end{itemize}
+    \item LSTM layer 2
+    \begin{itemize}
+        \item input sizes: n\_x = 160, m = 132,645, T$_{\text{x}}$ = 160
+        \item output sizes: n\_y = 160, m = 132,645
+    \end{itemize}
+    \item Dense layer
+    \begin{itemize}
+        \item input sizes: n\_x = 160, m = 132,645
+        \item output sizes: n\_y = 10, m = 132,645
+    \end{itemize}
+\end{enumerate}
+ 
+ Figures \ref{fig:model80_zoom_vx}, \ref{fig:model80_zoom_yaw}, \ref{fig:model80_zoom_wheel} are zoomed-in plots of Model 80 predictions. These figures visualize that different vehicle dynamic features were learned with variable success: 
+ \begin{itemize}
+     \item \textbf{longitudinal velocity}: (Figure \ref{fig:model80_zoom_vx}) Mean Squared Error (MSE) of 1.88 with an input value range of 61.72, resulting in MSE of 3.04\% of the input range. Longitudinal velocity appears to have been successfully learned as hoped due to strong correlation with the throttle and brake pedal input, after some time delay. However the model appears to accumulate most of its error when input values go beyond 50, future work would be needed to understand why the model appears to be failing to output values much beyond 50.
+     \item \textbf{lateral velocity}: MSE of 0.27 on input range of 4.04, resulting in MSE of 6.91\% of range. Lateral velocity was not as successful at being learned as longitudinal velocity, this is likely due to a weaker correlation between steering input and lateral velocity as well as a significantly smaller input range for this feature.
+     \item \textbf{yaw angle}: (Figure \ref{fig:model80_zoom_yaw}) MSE of 2.96 on input range of 359.98, resulting in MSE of 0.82\% of range. Yaw angle appears to have been quite successfully learned as hoped due to strong correlation with the steering wheel angle. It is surprising how well the model was able to handle yaw angle discontinuities when it exceeds +/-180, how this is being accomplished would benefit from further investigation.
+     \item \textbf{wheel acceleration}: (Figure \ref{fig:model80_zoom_wheel}) MSE of 1.53 on input range of 83.88, resulting in MSE of 1.83\% of range. Wheel acceleration data appears to be reporting with too high of a frequency for the model, which is resulting in the model appearing to low-pass filter this feature.
+ \end{itemize}
+
+Additional models were trained to single outputs and were able to achieve the following results:
+
+\begin{itemize}
+    \item Model 95 was trained to longitudinal velocity only and achieve MSE of 0.43.
+    \item Model 90 was trained to lateral velocity only and achieved MSE of 0.09.
+    \item Model 97 was trained to yaw angle only and achieved MSE of 1.89.
+\end{itemize}
+
+\begin{figure}[!ht]
+\includegraphics[width=\textwidth]{model80/zoom_vxCG.png}
+\caption{Model 80 zoomed-in longitudinal velocity test set actual vs predicted.}
+\label{fig:model80_zoom_vx}
+\end{figure}
+
+\begin{figure}[!ht]
+\includegraphics[width=\textwidth]{model80/zoom_yawAngle.png}
+\caption{Model 80 zoomed-in yaw angle test set actual vs predicted.}
+\label{fig:model80_zoom_yaw}
+\end{figure}
+
+\begin{figure}[!ht]
+\includegraphics[width=\textwidth]{model80/zoom_wheelAccelFL.png}
+\caption{Model 80 zoomed-in front left wheel acceleration test set actual vs predicted.}
+\label{fig:model80_zoom_wheel}
+\end{figure}
+
+\section{Conclusion/Future Work }
+From these results LSTM's outperformed attempts to hand engineer temporal relationships into the data then train with simple multi-layer networks, and LSTM models appear generally capable of learning vehicle dynamics with temporal delays. However, LSTM results still had a significant MSE between predicted future results and actual future results in the test set, so the investigated network architecture does not appear to be a candidate to threaten replacing hand modeling vehicle dynamics for simulation.
+
+For future work I would like to investigate:
+\begin{enumerate}
+    \item \textbf{Integrating physical modeling with a RNN}: as proposed by \cite{shi2018neural, zeng2019tossingbot}. The approach proposed in both \cite{shi2018neural} and \cite{zeng2019tossingbot} is to utilize a physics model to implement the known features of movement then integrating with a learning model to fine-tune the unknown features or hardware unit specific features. Specifically, I would like to integrate a TensorFlow LSTM model with the PyBullet \cite{bullet} physics simulator's vehicle model, then apply common steering / brake / throttle input in simulation as from a real-world data capture and plot the resulting differences in position and orientation over time.
+    \item \textbf{Predict movement farther into the future}: this project continually predicted only the next step of movement based on recent history, it would be interesting to understand how much future movement could be accurately predicted based on the recent past.
+\end{enumerate}
+
+\printbibliography
+
+\section{Appendix}
+
+\begin{appendices}
+\section{Model Hyperparameters and Results}
+X and Y data groups are defined in Appendix \ref{appendix:data}
+\input{hyperparam_search.tex}
+\label{appendix:models}
+
+\section{Data Set Groups}
+\label{appendix:data}
+\subsection{x1}
+\label{appendix:datax1}
+axCG, ayCG, azCG, brake, chassisAccelFL, chassisAccelFR, chassisAccelRL, chassisAccelRR, clutch, handwheelAngle, deflectionFL, deflectionFR, horizontalSpeed, pitchAngle, pitchRate, rollAngle, rollRate, throttle, vxCG, vyCG, vzCG, wheelAccelFL, wheelAccelFR, wheelAccelRL, wheelAccelRR, yawAngle, yawRate
+\subsection{x2}
+\label{appendix:datax2}
+brake, clutch, handwheelAngle, throttle, horizontalSpeed, pitchAngle, pitchRate, rollAngle, rollRate, vxCG, vyCG, vzCG, yawAngle, yawRate
+\subsection{x3}
+\label{appendix:datax3}
+brake, clutch, handwheelAngle, throttle, pitchAngle, pitchRate, rollAngle, rollRate, yawAngle, yawRate, vxCG, vyCG, vzCG, axCG, ayCG, azCG, wheelAccelFL, wheelAccelFR, wheelAccelRL, wheelAccelRR
+\subsection{x4}
+\label{appendix:datax4}
+brake, clutch, handwheelAngle, throttle, pitchAngle, pitchRate, rollAngle, rollRate, yawAngle, yawRate, vxCG, vyCG, vzCG, axCG, ayCG, azCG
+\subsection{y1}
+\label{appendix:datay1}
+axCG, ayCG, azCG, chassisAccelFL, chassisAccelFR, chassisAccelRL, chassisAccelRR, horizontalSpeed, pitchAngle, pitchRate, rollAngle, rollRate, vxCG, vyCG, vzCG, wheelAccelFL, wheelAccelFR, wheelAccelRL, wheelAccelRR, yawAngle, yawRate
+\subsection{y2}
+\label{appendix:datay2}
+pitchAngle, rollAngle, vxCG, vyCG, vzCG, wheelAccelFL, wheelAccelFR, wheelAccelRL, wheelAccelRR, yawAngle
+\subsection{y3}
+\label{appendix:datay3}
+pitchAngle, pitchRate, rollAngle, rollRate, yawAngle, yawRate, vxCG, vyCG, vzCG, axCG, ayCG, azCG, wheelAccelFL, wheelAccelFR, wheelAccelRL, wheelAccelRR
+\subsection{y4}
+\label{appendix:datay4}
+pitchAngle, rollAngle, yawAngle, vxCG, vyCG, vzCG, wheelAccelFL, wheelAccelFR, wheelAccelRL, wheelAccelRR
+\subsection{y5}
+\label{appendix:datay5}
+rollAngle, yawAngle, vxCG, vyCG, vzCG
+\subsection{y6}
+\label{appendix:datay6}
+yawAngle, vxCG
+
+\end{appendices}
+
+\end{document}

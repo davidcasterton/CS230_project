@@ -1,0 +1,1 @@
+{"sequence_length": 200, "cols_x": "x3", "cols_y": "y5", "learning_rate": 0.005, "learning_rate_decay": 1e-05, "batch_norm": false, "dropout": 0.1, "lstm_units": 200, "num_data_files": 4, "2nd_LSTM_layer": false, "loss": 10.817312279522831, "mean_absolute_error": 0.9116817116737366, "session": "models/model-7/20190607222343", "time": "102:25"}
