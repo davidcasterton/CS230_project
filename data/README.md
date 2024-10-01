@@ -1,1 +1,1 @@
-Data files from https://exhibits.stanford.edu/data/browse/revs-vehicle-dynamics-database . Original CSV files were converted to parquet to optimize storage size.Data moved to https://drive.google.com/file/d/1RLi-13bdRVIh9dDpqv_g9xumCR-VuvmD/view?usp=sharing
+Data files from https://exhibits.stanford.edu/data/browse/revs-vehicle-dynamics-database . Original CSV files were converted to parquet to optimize storage size. 
